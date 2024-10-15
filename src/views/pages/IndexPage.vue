@@ -1,6 +1,10 @@
+<script lang="ts" setup>
+import PageHeader from "@/components/PageHeader.vue";
+</script>
+
 <template>
     <div class="index-page">
-        <h1>Hello, world!</h1>
+        <page-header title="Programs"/>
     </div>
 </template>
 

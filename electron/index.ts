@@ -16,13 +16,16 @@ function registerLocalResourceProtocol() {
 
 async function createWindow() {
     const win = new BrowserWindow({
-        width: 800,
-        height: 600,
+        width: 1055,
+        height: 1000,
+        center: true,
         webPreferences: {
             nodeIntegration: (process.env.ELECTRON_NODE_INTEGRATION as unknown) as boolean,
             preload: path.resolve(__dirname, "preload.js")
         }
     });
+
+    win.setMenu(null);
 
     if (app.isPackaged) {
         await win.loadFile(path.join(__dirname, "../dist/index.html"));
