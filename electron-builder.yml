@@ -1,0 +1,15 @@
+---
+productName: dostron
+appId: dostron
+files:
+  - dist/
+  - dist-electron/
+mac:
+  target: tar.xz
+  icon: resources/icons/app.png
+win:
+  target: 7z
+  icon: resources/icons/app.png
+linux:
+  target: tar.xz
+  icon: resources/icons/app.png
