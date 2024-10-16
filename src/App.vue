@@ -1,12 +1,15 @@
 <script lang="ts" setup>
 import {ref, onMounted} from "vue";
+import {useStore} from "vuex";
+
 import api from "./api";
 import MainView from "./views/MainView.vue";
 
+const store = useStore();
 const ready = ref(false);
 
 onMounted(async () => {
-    console.log(api.hello());
+    store.commit("updatePrograms", await api.discoverPrograms());
 
     ready.value = true;
 });

@@ -1,5 +1,6 @@
 import path from "node:path";
 import {app, BrowserWindow, protocol} from "electron";
+import "./ipc";
 
 function registerLocalResourceProtocol() {
     protocol.registerFileProtocol("local-resource", (request, callback) => {

@@ -1,7 +1,6 @@
-import {contextBridge} from "electron";
+import {contextBridge, ipcRenderer} from "electron";
+import {Program} from "dostron/types";
 
 contextBridge.exposeInMainWorld("$api", {
-    hello: (): string => {
-        return "Hello, world!";
-    }
+    discoverPrograms: async (): Promise<Program> => ipcRenderer.invoke("discoverPrograms")
 });

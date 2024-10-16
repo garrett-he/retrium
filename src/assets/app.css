@@ -1,0 +1,23 @@
+* {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: Arial, serif;
+    font-size: 14px;
+    background: #eee;
+    color: #666;
+}
+
+body::-webkit-scrollbar {
+    display: none;
+}
+
+.clear {
+    clear: both;
+}
+
+main {
+    margin: 60px 10px 10px;
+}

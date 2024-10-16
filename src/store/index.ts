@@ -1,5 +1,13 @@
 import {createStore} from "vuex";
+import {Program} from "dostron/types";
 
 export default createStore({
-    state: () => ({})
+    state: () => ({
+        programs: <Program[]>[]
+    }),
+    mutations: {
+        updatePrograms: (state, programs: Program[]) => {
+            state.programs = programs;
+        }
+    }
 });
