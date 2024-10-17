@@ -3,6 +3,7 @@ declare module "dostron/types" {
         id: string;
         dir: string;
         info: ProgramInfo;
+        cover?: string | undefined;
     }
 
     interface ProgramInfo {

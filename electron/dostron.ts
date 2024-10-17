@@ -12,7 +12,8 @@ function loadProgram(dir: string): Program {
     return <Program>{
         id: path.basename(dir),
         dir,
-        info: loadProgramInfo(dir)
+        info: loadProgramInfo(dir),
+        cover: locateProgramCover(dir)
     };
 }
 
@@ -23,4 +24,9 @@ function loadProgramInfo(dir: string): ProgramInfo {
 
 function getDataDirectoryPath(base: string): string {
     return path.resolve(base, ".dostron");
+}
+
+function locateProgramCover(dir: string): string | undefined {
+    const filePath = path.resolve(getDataDirectoryPath(dir), "cover.png");
+    return fs.existsSync(filePath) ? filePath : undefined;
 }
