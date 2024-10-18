@@ -15,7 +15,9 @@ const programs = ref(store.state.programs);
         <page-header title="Programs"/>
         <main>
             <div class="program-card-list">
-                <program-card :program="program" v-for="program in programs" :key="program.id"/>
+                <router-link v-for="program in programs" :to="`/programs/${program.id}`" :key="program.id">
+                    <program-card :program="program"/>
+                </router-link>
                 <div class="clear"/>
             </div>
         </main>

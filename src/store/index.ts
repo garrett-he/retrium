@@ -9,5 +9,10 @@ export default createStore({
         updatePrograms: (state, programs: Program[]) => {
             state.programs = programs;
         }
+    },
+    getters: {
+        getProgram: state => (id: string): Program | undefined => {
+            return state.programs.find(program => program.id === id);
+        }
     }
 });
