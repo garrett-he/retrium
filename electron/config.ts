@@ -4,6 +4,7 @@ import ElectronStore from "electron-store";
 
 interface Config {
     library: string;
+    dosbox: string;
 }
 
 export default new ElectronStore<Config>({

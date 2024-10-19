@@ -1,11 +1,14 @@
 <script lang="ts" setup>
-import {computed, ref} from "vue";
-import {useRoute, useRouter} from "vue-router";
+import {computed, ref, toRaw} from "vue";
+import {useRoute} from "vue-router";
 import {useStore} from "vuex";
 
-import {Program} from "dostron/types";
+import {Program, ProgramProcess} from "dostron/types";
 import PageHeader from "@/components/PageHeader.vue";
 import ProgramCover from "@/components/ProgramCover.vue";
+import api from "@/api";
+
+import {CaretRightOutlined, PauseOutlined} from "@ant-design/icons-vue";
 
 const store = useStore();
 const route = useRoute();
@@ -19,6 +22,15 @@ function getProgramInfo(program: Program, key: string) {
 
     return Array.isArray(program.info[key]) ? program.info[key].join(", ") : program.info[key];
 }
+
+async function runProgram(e) {
+    process.value = await api.runProgram(toRaw(program.value));
+}
+
+async function stopProgram() {
+    await api.stopProgram(toRaw(program.value));
+    process.value = undefined;
+}
 </script>
 <template>
     <div class="program-page" v-if="program">
@@ -27,6 +39,20 @@ function getProgramInfo(program: Program, key: string) {
             <div class="program-cover">
                 <program-cover :program="program"/>
             </div>
+            <a-space class="program-buttons">
+                <a-button v-if="!process" @click="runProgram" type="primary">
+                    <template #icon>
+                        <caret-right-outlined/>
+                    </template>
+                    Run
+                </a-button>
+                <a-button v-else @click="stopProgram" danger>
+                    <template #icon>
+                        <pause-outlined/>
+                    </template>
+                    Stop
+                </a-button>
+            </a-space>
             <div class="program-details">
                 <a-descriptions title="Information" :column="3" size="small" bordered>
                     <a-descriptions-item label="Category">
@@ -73,5 +99,11 @@ main {
 .program-details {
     padding: 10px 20px;
     clear: both;
+}
+
+.program-buttons {
+    margin: 10px;
+    text-align: right;
+    float: right;
 }
 </style>

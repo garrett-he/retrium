@@ -16,4 +16,9 @@ declare module "dostron/types" {
         series?: string;
         tags?: string[];
     }
+
+    interface ProgramProcess {
+        pid: number;
+        program: Program;
+    }
 }
