@@ -1,4 +1,4 @@
-import {ipcMain} from "electron";
+import {ipcMain, shell} from "electron";
 import {Program, ProgramProcess} from "dostron/types";
 import {discoverPrograms, ProcessManager} from "./dostron";
 import config from "./config";
@@ -23,4 +23,8 @@ ipcMain.handle("runProgram", async (_, program: Program): Promise<ProgramProcess
 
 ipcMain.handle("stopProgram", async (event, program: Program): Promise<void> => {
     await processManager.killProcessByProgram(program);
+});
+
+ipcMain.handle("openProgramFolder", async (event, program: Program): Promise<void> => {
+    await shell.openPath(program.dir);
 });

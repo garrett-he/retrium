@@ -8,7 +8,7 @@ import PageHeader from "@/components/PageHeader.vue";
 import ProgramCover from "@/components/ProgramCover.vue";
 import api from "@/api";
 
-import {CaretRightOutlined, PauseOutlined} from "@ant-design/icons-vue";
+import {CaretRightOutlined, PauseOutlined, FolderOpenOutlined} from "@ant-design/icons-vue";
 
 const store = useStore();
 const route = useRoute();
@@ -31,6 +31,9 @@ async function stopProgram() {
     await api.stopProgram(toRaw(program.value));
     process.value = undefined;
 }
+async function browseProgram() {
+    await api.openProgramFolder(toRaw(program.value));
+}
 </script>
 <template>
     <div class="program-page" v-if="program">
@@ -51,6 +54,12 @@ async function stopProgram() {
                         <pause-outlined/>
                     </template>
                     Stop
+                </a-button>
+                <a-button @click="browseProgram">
+                    <template #icon>
+                        <folder-open-outlined/>
+                    </template>
+                    Browse
                 </a-button>
             </a-space>
             <div class="program-details">
