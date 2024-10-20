@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import {computed, ref, toRaw} from "vue";
-import {useRoute} from "vue-router";
+import {useRoute, useRouter} from "vue-router";
 import {useStore} from "vuex";
 
 import {Program, ProgramProcess} from "dostron/types";
@@ -8,10 +8,12 @@ import PageHeader from "@/components/PageHeader.vue";
 import ProgramCover from "@/components/ProgramCover.vue";
 import api from "@/api";
 
-import {CaretRightOutlined, PauseOutlined, FolderOpenOutlined} from "@ant-design/icons-vue";
+import {CaretRightOutlined, PauseOutlined, FolderOpenOutlined, DeleteOutlined} from "@ant-design/icons-vue";
 
 const store = useStore();
 const route = useRoute();
+const router = useRouter();
+
 const program = computed(() => <Program>store.getters.getProgram(route.params.id));
 const process = ref<ProgramProcess | undefined>();
 
@@ -31,8 +33,17 @@ async function stopProgram() {
     await api.stopProgram(toRaw(program.value));
     process.value = undefined;
 }
+
 async function browseProgram() {
     await api.openProgramFolder(toRaw(program.value));
+}
+
+async function deleteProgram() {
+    if (confirm("Are you sure to delete this program?")) {
+        await api.deleteProgram(toRaw(program.value));
+        store.commit("updatePrograms", await api.discoverPrograms());
+        await router.go(-1);
+    }
 }
 </script>
 <template>
@@ -60,6 +71,12 @@ async function browseProgram() {
                         <folder-open-outlined/>
                     </template>
                     Browse
+                </a-button>
+                <a-button @click="deleteProgram" danger>
+                    <template #icon>
+                        <delete-outlined/>
+                    </template>
+                    Delete
                 </a-button>
             </a-space>
             <div class="program-details">

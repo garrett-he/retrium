@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import {ipcMain, shell} from "electron";
 import {Program, ProgramProcess} from "dostron/types";
 import {discoverPrograms, ProcessManager} from "./dostron";
@@ -27,4 +28,8 @@ ipcMain.handle("stopProgram", async (event, program: Program): Promise<void> => 
 
 ipcMain.handle("openProgramFolder", async (event, program: Program): Promise<void> => {
     await shell.openPath(program.dir);
+});
+
+ipcMain.handle("deleteProgram", async (event, program: Program): Promise<void> => {
+    fs.rmSync(program.dir, {recursive: true});
 });
