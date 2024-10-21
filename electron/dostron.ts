@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {execFile} from "node:child_process";
+import archiver from "archiver";
 import {Program, ProgramInfo, ProgramProcess} from "dostron/types";
 
 export function discoverPrograms(dir: string): Program[] {
@@ -30,6 +31,22 @@ function getDataDirectoryPath(base: string): string {
 function locateProgramCover(dir: string): string | undefined {
     const filePath = path.resolve(getDataDirectoryPath(dir), "cover.png");
     return fs.existsSync(filePath) ? filePath : undefined;
+}
+
+export async function archiveProgram(program: Program, target: string): Promise<void> {
+    if (fs.existsSync(target)) {
+        throw new Error(`File "${target}" already exists.`);
+    }
+
+    const output = fs.createWriteStream(target);
+    const archive = archiver.create("zip", {
+        zlib: {level: 9}
+    });
+
+    archive.pipe(output);
+    archive.directory(program.dir, false);
+
+    await archive.finalize();
 }
 
 export class ProcessManager {

@@ -1,7 +1,8 @@
 import fs from "node:fs";
-import {ipcMain, shell} from "electron";
+import path from "node:path";
+import {ipcMain, shell, dialog, SaveDialogOptions} from "electron";
 import {Program, ProgramProcess} from "dostron/types";
-import {discoverPrograms, ProcessManager} from "./dostron";
+import {discoverPrograms, ProcessManager, archiveProgram} from "./dostron";
 import config from "./config";
 
 const processManager = new ProcessManager();
@@ -32,4 +33,19 @@ ipcMain.handle("openProgramFolder", async (event, program: Program): Promise<voi
 
 ipcMain.handle("deleteProgram", async (event, program: Program): Promise<void> => {
     fs.rmSync(program.dir, {recursive: true});
+});
+
+ipcMain.handle("archiveProgram", async (event, program: Program): Promise<void> => {
+    const filePath = dialog.showSaveDialogSync(<SaveDialogOptions>{
+        defaultPath: `${path.basename(program.dir)}.zip`,
+        filters: [
+            {name: "Program Packages", extensions: ["zip", "tar.gz", "tgz"]},
+            {name: "All Files", extensions: ["*"]}
+        ],
+        properties: ["createDirectory"]
+    });
+
+    if (filePath) {
+        return archiveProgram(program, filePath);
+    }
 });

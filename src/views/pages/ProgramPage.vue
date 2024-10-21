@@ -8,7 +8,7 @@ import PageHeader from "@/components/PageHeader.vue";
 import ProgramCover from "@/components/ProgramCover.vue";
 import api from "@/api";
 
-import {CaretRightOutlined, PauseOutlined, FolderOpenOutlined, DeleteOutlined} from "@ant-design/icons-vue";
+import {CaretRightOutlined, PauseOutlined, FolderOpenOutlined, DeleteOutlined, DownloadOutlined} from "@ant-design/icons-vue";
 
 const store = useStore();
 const route = useRoute();
@@ -45,6 +45,10 @@ async function deleteProgram() {
         await router.go(-1);
     }
 }
+
+async function archiveProgram() {
+    await api.archiveProgram(toRaw(program.value));
+}
 </script>
 <template>
     <div class="program-page" v-if="program">
@@ -71,6 +75,12 @@ async function deleteProgram() {
                         <folder-open-outlined/>
                     </template>
                     Browse
+                </a-button>
+                <a-button @click="archiveProgram">
+                    <template #icon>
+                        <download-outlined/>
+                    </template>
+                    Export
                 </a-button>
                 <a-button @click="deleteProgram" danger>
                     <template #icon>
