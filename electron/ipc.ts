@@ -68,3 +68,7 @@ ipcMain.handle("addPrograms", async (): Promise<Program[]> => {
         return await extractProgramArchive(filePath, path.resolve(config.get("library"), path.parse(filePath).name));
     }));
 });
+
+ipcMain.handle("getProgramProcess", async (event, program: Program): Promise<ProgramProcess | undefined> => {
+    return processManager.findProcessByProgram(program);
+});

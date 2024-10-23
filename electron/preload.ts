@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld("$api", {
     openProgramFolder: async (program: Program): Promise<void> => ipcRenderer.invoke("openProgramFolder", program),
     deleteProgram: async (program: Program): Promise<void> => ipcRenderer.invoke("deleteProgram", program),
     archiveProgram: async (program: Program): Promise<void> => ipcRenderer.invoke("archiveProgram", program),
-    addPrograms: async (): Promise<Program[]> => ipcRenderer.invoke("addPrograms")
+    addPrograms: async (): Promise<Program[]> => ipcRenderer.invoke("addPrograms"),
+    getProgramProcess: async (program: Program): Promise<ProgramProcess> => ipcRenderer.invoke("getProgramProcess", program)
 });
