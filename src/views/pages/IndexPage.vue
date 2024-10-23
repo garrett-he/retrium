@@ -5,6 +5,9 @@ import {useStore} from "vuex";
 import {Program} from "dostron/types";
 import PageHeader from "@/components/PageHeader.vue";
 import ProgramCard from "@/components/ProgramCard.vue";
+import api from "@/api";
+
+import {PlusOutlined} from "@ant-design/icons-vue";
 
 const store = useStore();
 
@@ -35,6 +38,11 @@ const categories = computed(() => {
 
     return categories;
 });
+
+async function addPrograms() {
+    await api.addPrograms();
+    store.commit("updatePrograms", await api.discoverPrograms());
+}
 </script>
 
 <template>
@@ -50,6 +58,11 @@ const categories = computed(() => {
                         {{ category }} ({{ count }})
                     </a-radio-button>
                 </a-radio-group>
+                <a-button @click="addPrograms">
+                    <template #icon>
+                        <plus-outlined/>
+                    </template>
+                </a-button>
             </a-space>
             <div class="program-card-list">
                 <router-link v-for="program in programs" :to="`/programs/${program.id}`" :key="program.id">

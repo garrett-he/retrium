@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {execFile} from "node:child_process";
 import archiver from "archiver";
+import extractZip from "extract-zip";
 import {Program, ProgramInfo, ProgramProcess} from "dostron/types";
 
 export function discoverPrograms(dir: string): Program[] {
@@ -47,6 +48,14 @@ export async function archiveProgram(program: Program, target: string): Promise<
     archive.directory(program.dir, false);
 
     await archive.finalize();
+}
+
+export async function extractProgramArchive(archive: string, target: string): Promise<Program> {
+    if (fs.existsSync(target)) {
+        throw new Error(`Directory "${target}" already exists.`);
+    }
+
+    await extractZip(archive, {dir: target});
 }
 
 export class ProcessManager {

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {ipcMain, shell, dialog, SaveDialogOptions} from "electron";
 import {Program, ProgramProcess} from "dostron/types";
-import {discoverPrograms, ProcessManager, archiveProgram} from "./dostron";
+import {discoverPrograms, ProcessManager, archiveProgram, extractProgramArchive} from "./dostron";
 import config from "./config";
 
 const processManager = new ProcessManager();
@@ -48,4 +48,23 @@ ipcMain.handle("archiveProgram", async (event, program: Program): Promise<void> 
     if (filePath) {
         return archiveProgram(program, filePath);
     }
+});
+
+
+ipcMain.handle("addPrograms", async (): Promise<Program[]> => {
+    const filePaths = dialog.showOpenDialogSync(<OpenDialogOptions>{
+        filters: [
+            {name: "Program Archive", extensions: ["zip", "tar.gz", "tgz"]},
+            {name: "All Files", extensions: ["*"]}
+        ],
+        properties: ["openFile", "multiSelections"]
+    });
+
+    if (!filePaths) {
+        return [];
+    }
+
+    return Promise.all(filePaths.map(async filePath => {
+        return await extractProgramArchive(filePath, path.resolve(config.get("library"), path.parse(filePath).name));
+    }));
 });
