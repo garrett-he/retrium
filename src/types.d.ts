@@ -21,4 +21,10 @@ declare module "dostron/types" {
         pid: number;
         program: Program;
     }
+
+    interface ProgramSummary {
+        lastRun: Date;
+        runs: number;
+        elapsed: number;
+    }
 }

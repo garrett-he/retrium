@@ -1,14 +1,23 @@
 <script lang="ts" setup>
-import {computed, ref, toRaw} from "vue";
+import {computed, ref, toRaw, onMounted} from "vue";
 import {useRoute, useRouter} from "vue-router";
 import {useStore} from "vuex";
 
-import {Program, ProgramProcess} from "dostron/types";
+import {Program, ProgramProcess, ProgramSummary} from "dostron/types";
 import PageHeader from "@/components/PageHeader.vue";
 import ProgramCover from "@/components/ProgramCover.vue";
 import api from "@/api";
 
-import {CaretRightOutlined, PauseOutlined, FolderOpenOutlined, DeleteOutlined, DownloadOutlined} from "@ant-design/icons-vue";
+import {
+    CaretRightOutlined,
+    PauseOutlined,
+    FolderOpenOutlined,
+    DeleteOutlined,
+    DownloadOutlined,
+    CalendarOutlined,
+    ClockCircleOutlined,
+    LineChartOutlined
+} from "@ant-design/icons-vue";
 
 const store = useStore();
 const route = useRoute();
@@ -16,6 +25,7 @@ const router = useRouter();
 
 const program = computed(() => <Program>store.getters.getProgram(route.params.id));
 const process = ref<ProgramProcess | undefined>();
+const summary = ref<ProgramSummary | undefined>();
 
 function getProgramInfo(program: Program, key: string) {
     if (!program.info[key]) {
@@ -49,6 +59,17 @@ async function deleteProgram() {
 async function archiveProgram() {
     await api.archiveProgram(toRaw(program.value));
 }
+
+onMounted(async () => {
+    summary.value = await api.getProgramSummary(toRaw(program.value));
+
+    if (!summary.value) {
+        summary.value = <ProgramSummary>{
+            runs: 0,
+            elapsed: 0
+        };
+    }
+});
 </script>
 <template>
     <div class="program-page" v-if="program">
@@ -57,6 +78,26 @@ async function archiveProgram() {
             <div class="program-cover">
                 <program-cover :program="program"/>
             </div>
+            <dl v-if="summary" class="program-summary">
+                <dt>
+                    <calendar-outlined title="Last Run"/>
+                </dt>
+                <dd>
+                    {{ summary.lastRun ? new Date(summary.lastRun).toLocaleDateString() : "N/A" }}
+                </dd>
+                <dt>
+                    <clock-circle-outlined title="Seconds Run"/>
+                </dt>
+                <dd>
+                    {{ summary.elapsed }}
+                </dd>
+                <dt>
+                    <line-chart-outlined title="Run Times"/>
+                </dt>
+                <dd>
+                    {{ summary.runs }}
+                </dd>
+            </dl>
             <a-space class="program-buttons">
                 <a-button v-if="!process" @click="runProgram" type="primary">
                     <template #icon>
@@ -141,5 +182,23 @@ main {
     margin: 10px;
     text-align: right;
     float: right;
+}
+
+dl {
+    margin: 10px;
+}
+
+dt {
+
+    font-weight: bold;
+    float: left;
+}
+
+dd {
+
+    float: left;
+    margin-left: 5px;
+    margin-right: 10px;
+    clear: right;
 }
 </style>

@@ -1,9 +1,9 @@
-import fs from "node:fs";
+import fs from "fs-extra";
 import path from "node:path";
 import {execFile} from "node:child_process";
 import archiver from "archiver";
 import extractZip from "extract-zip";
-import {Program, ProgramInfo, ProgramProcess} from "dostron/types";
+import {Program, ProgramInfo, ProgramProcess, ProgramSummary} from "dostron/types";
 
 export function discoverPrograms(dir: string): Program[] {
     return fs.readdirSync(dir, {withFileTypes: true})
@@ -56,6 +56,24 @@ export async function extractProgramArchive(archive: string, target: string): Pr
     }
 
     await extractZip(archive, {dir: target});
+}
+
+export function getProgramSummary(root: string, program: Program): ProgramSummary | undefined {
+    const filePath = path.resolve(root, `${program.id}.json`);
+
+    if (!fs.existsSync(filePath)) {
+        return undefined;
+    }
+
+    const summary = fs.readJSONSync(filePath);
+    summary.lastRun = new Date(summary.lastRun);
+
+    return summary;
+}
+
+export function setProgramSummary(root: string, program: Program, summary: ProgramSummary) {
+    const filePath = path.resolve(root, `${program.id}.json`);
+    fs.writeJSONSync(filePath, summary);
 }
 
 export class ProcessManager {

@@ -1,13 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import {ipcMain, shell, dialog, SaveDialogOptions} from "electron";
-import {Program, ProgramProcess} from "dostron/types";
-import {discoverPrograms, ProcessManager, archiveProgram, extractProgramArchive} from "./dostron";
+import {Program, ProgramProcess, ProgramSummary} from "dostron/types";
+import {discoverPrograms, ProcessManager, archiveProgram, extractProgramArchive, getProgramSummary, setProgramSummary} from "./dostron";
 import config from "./config";
 
+const programsDir = path.join(config.get("library"), "programs");
+const summariesDir = path.join(config.get("library"), "summaries");
 const processManager = new ProcessManager();
 
-ipcMain.handle("discoverPrograms", async (): Promise<Program[]> => discoverPrograms(config.get("library")));
+ipcMain.handle("discoverPrograms", async (): Promise<Program[]> => discoverPrograms(programsDir));
 
 ipcMain.handle("runProgram", async (_, program: Program): Promise<ProgramProcess> => {
     let process = processManager.findProcessByProgram(program);
@@ -16,6 +18,21 @@ ipcMain.handle("runProgram", async (_, program: Program): Promise<ProgramProcess
     }
 
     process = processManager.runProgram(program, config.get("dosbox"));
+
+    const summary = getProgramSummary(summariesDir, program) || <ProgramSummary>{
+        runs: 0,
+        elapsed: 0
+    };
+
+    summary.lastRun = new Date();
+
+    process.on("exit", () => {
+        summary.runs++;
+        summary.elapsed += Math.round(((new Date()).getTime() - summary.lastRun.getTime()) / 1000);
+        summary.lastRun = new Date();
+
+        setProgramSummary(summariesDir, program, summary);
+    });
 
     return <ProgramProcess>{
         pid: process.pid,
@@ -72,3 +89,5 @@ ipcMain.handle("addPrograms", async (): Promise<Program[]> => {
 ipcMain.handle("getProgramProcess", async (event, program: Program): Promise<ProgramProcess | undefined> => {
     return processManager.findProcessByProgram(program);
 });
+
+ipcMain.handle("getProgramSummary", async (_, program: Program): Promise<ProgramSummary | undefined> => getProgramSummary(summariesDir, program));
