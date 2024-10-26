@@ -76,6 +76,38 @@ export function setProgramSummary(root: string, program: Program, summary: Progr
     fs.writeJSONSync(filePath, summary);
 }
 
+export function restoreProgramStates(dir: string, program: Program) {
+    if (!fs.existsSync(dir)) {
+        return;
+    }
+
+    const listFiles = (dir: string) => {
+        let files = new Array<string>();
+
+        fs.readdirSync(dir).forEach(file => {
+            const filePath = path.resolve(dir, file);
+            const states = fs.statSync(filePath);
+
+            if (states.isDirectory()) {
+                files = files.concat(listFiles(filePath));
+            }
+
+            if (states.isFile()) {
+                files.push(filePath);
+            }
+        });
+
+        return files;
+    };
+
+    listFiles(dir).forEach(file => {
+        const relativePath = file.replace(dir, "");
+        const targetPath = path.join(program.dir, relativePath);
+
+        fs.copySync(file, targetPath);
+    });
+}
+
 export class ProcessManager {
     public readonly processes: ProgramProcess[] = [];
 

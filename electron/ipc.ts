@@ -1,12 +1,14 @@
-import fs from "node:fs";
+import fs from "fs-extra";
 import path from "node:path";
 import {ipcMain, shell, dialog, SaveDialogOptions} from "electron";
+import watch from "node-watch";
 import {Program, ProgramProcess, ProgramSummary} from "dostron/types";
-import {discoverPrograms, ProcessManager, archiveProgram, extractProgramArchive, getProgramSummary, setProgramSummary} from "./dostron";
+import {discoverPrograms, ProcessManager, archiveProgram, extractProgramArchive, getProgramSummary, setProgramSummary, restoreProgramStates} from "./dostron";
 import config from "./config";
 
 const programsDir = path.join(config.get("library"), "programs");
 const summariesDir = path.join(config.get("library"), "summaries");
+const statesDir = path.join(config.get("library"), "states");
 const processManager = new ProcessManager();
 
 ipcMain.handle("discoverPrograms", async (): Promise<Program[]> => discoverPrograms(programsDir));
@@ -17,6 +19,7 @@ ipcMain.handle("runProgram", async (_, program: Program): Promise<ProgramProcess
         throw new Error(`Program is already running with PID: ${process.pid}`);
     }
 
+    restoreProgramStates(path.join(statesDir, program.id), program);
     process = processManager.runProgram(program, config.get("dosbox"));
 
     const summary = getProgramSummary(summariesDir, program) || <ProgramSummary>{
@@ -25,6 +28,19 @@ ipcMain.handle("runProgram", async (_, program: Program): Promise<ProgramProcess
     };
 
     summary.lastRun = new Date();
+
+    const watcher = watch(program.dir, {recursive: true});
+    watcher.on("change", (event, filePath: string) => {
+        const relativePath = filePath.replace(program.dir, "");
+        const target = path.join(statesDir, program.id, relativePath);
+
+        fs.ensureDirSync(path.dirname(target));
+
+        // Make sure the file is not temporary and won't disappear
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+            fs.copyFileSync(filePath, target);
+        }
+    });
 
     process.on("exit", () => {
         summary.runs++;
