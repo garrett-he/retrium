@@ -1,8 +1,8 @@
 import fs from "fs-extra";
 import path from "node:path";
-import {ipcMain, shell, dialog, SaveDialogOptions} from "electron";
+import {ipcMain, shell, dialog, SaveDialogOptions, OpenDialogOptions} from "electron";
 import watch from "node-watch";
-import {Program, ProgramProcess, ProgramSummary} from "dostron/types";
+import {Program, ProgramProcess, ProgramSummary, DosboxVersionConfig, ProgramRunOptions} from "dostron/types";
 import {discoverPrograms, ProcessManager, archiveProgram, extractProgramArchive, getProgramSummary, setProgramSummary, restoreProgramStates} from "./dostron";
 import config from "./config";
 
@@ -13,14 +13,17 @@ const processManager = new ProcessManager();
 
 ipcMain.handle("discoverPrograms", async (): Promise<Program[]> => discoverPrograms(programsDir));
 
-ipcMain.handle("runProgram", async (_, program: Program): Promise<ProgramProcess> => {
+ipcMain.handle("runProgram", async (_, options: ProgramRunOptions): Promise<ProgramProcess> => {
+    const program = options.program;
     let process = processManager.findProcessByProgram(program);
     if (process) {
         throw new Error(`Program is already running with PID: ${process.pid}`);
     }
 
     restoreProgramStates(path.join(statesDir, program.id), program);
-    process = processManager.runProgram(program, config.get("dosbox"));
+
+    const dosbox = config.get("dosbox").versions[options.dosboxVersion ?? config.get("dosbox").default];
+    process = processManager.runProgram(program, dosbox);
 
     const summary = getProgramSummary(summariesDir, program) || <ProgramSummary>{
         runs: 0,
@@ -107,3 +110,7 @@ ipcMain.handle("getProgramProcess", async (event, program: Program): Promise<Pro
 });
 
 ipcMain.handle("getProgramSummary", async (_, program: Program): Promise<ProgramSummary | undefined> => getProgramSummary(summariesDir, program));
+
+ipcMain.handle("getDosboxVersions", async (): Promise<DosboxVersionConfig> => {
+    return config.get("dosbox")["versions"];
+});

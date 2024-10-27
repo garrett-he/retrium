@@ -1,13 +1,17 @@
 import {createStore} from "vuex";
-import {Program} from "dostron/types";
+import {Program, DosboxVersionConfig} from "dostron/types";
 
 export default createStore({
     state: () => ({
-        programs: <Program[]>[]
+        programs: <Program[]>[],
+        dosboxVersions: <DosboxVersionConfig>{}
     }),
     mutations: {
         updatePrograms: (state, programs: Program[]) => {
             state.programs = programs;
+        },
+        dosboxVersions: (state, versions: DosboxVersionConfig) => {
+            state.dosboxVersions = versions;
         }
     },
     getters: {

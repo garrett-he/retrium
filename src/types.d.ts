@@ -27,4 +27,11 @@ declare module "dostron/types" {
         runs: number;
         elapsed: number;
     }
+
+    type DosboxVersionConfig = { [key: string]: string };
+
+    interface ProgramRunOptions {
+        program: Program;
+        dosboxVersion: string;
+    }
 }

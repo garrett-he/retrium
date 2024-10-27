@@ -10,6 +10,7 @@ const ready = ref(false);
 
 onMounted(async () => {
     store.commit("updatePrograms", await api.discoverPrograms());
+    store.commit("dosboxVersions", await api.getDosboxVersions());
 
     ready.value = true;
 });

@@ -3,7 +3,7 @@ import {computed, ref, toRaw, onMounted} from "vue";
 import {useRoute, useRouter} from "vue-router";
 import {useStore} from "vuex";
 
-import {Program, ProgramProcess, ProgramSummary} from "dostron/types";
+import {Program, ProgramProcess, ProgramSummary, ProgramRunOptions} from "dostron/types";
 import PageHeader from "@/components/PageHeader.vue";
 import ProgramCover from "@/components/ProgramCover.vue";
 import api from "@/api";
@@ -36,7 +36,10 @@ function getProgramInfo(program: Program, key: string) {
 }
 
 async function runProgram(e) {
-    process.value = await api.runProgram(toRaw(program.value));
+    process.value = await api.runProgram(<ProgramRunOptions>{
+        program: toRaw(program.value),
+        dosboxVersion: e.key ?? undefined
+    });
 }
 
 async function stopProgram() {
@@ -99,18 +102,23 @@ onMounted(async () => {
                 </dd>
             </dl>
             <a-space class="program-buttons">
-                <a-button v-if="!process" @click="runProgram" type="primary">
-                    <template #icon>
-                        <caret-right-outlined/>
-                    </template>
-                    Run
-                </a-button>
-                <a-button v-else @click="stopProgram" danger>
+                <a-button v-if="process" @click="stopProgram" danger>
                     <template #icon>
                         <pause-outlined/>
                     </template>
                     Stop
                 </a-button>
+                <a-dropdown-button v-else @click="runProgram" type="primary">
+                    <template #icon>
+                        <caret-right-outlined/>
+                    </template>
+                    <template #overlay>
+                        <a-menu slot="overlay" @click="runProgram">
+                            <a-menu-item v-for="(_, key) in store.state.dosboxVersions" :key="key">{{ key }}</a-menu-item>
+                        </a-menu>
+                    </template>
+                    Run
+                </a-dropdown-button>
                 <a-button @click="browseProgram">
                     <template #icon>
                         <folder-open-outlined/>
