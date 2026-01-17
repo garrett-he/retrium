@@ -7,16 +7,10 @@ insert_final_newline = true
 indent_size = 4
 indent_style = space
 trim_trailing_whitespace = true
-max_line_length = 160
+max_line_length = 120
 
-[{COPYING,LICENSE,*.md}]
-max_line_length = 80
+[{LICENSE,*.md}]
+max_line_length = 88
 
 [*.{yaml,yml}]
 indent_size = 2
-
-[Makefile]
-indent_style = tab
-
-[*.{cmd,bat}]
-end_of_line = crlf
