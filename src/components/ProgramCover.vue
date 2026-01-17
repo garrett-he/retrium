@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import UnknownCover from "../assets/images/no-cover.png";
 import {computed, PropType} from "vue";
-import {Program} from "dostron/types";
+import {Program} from "retrium/types";
 
 const props = defineProps({
     program: {

@@ -1,4 +1,4 @@
-declare module "dostron/types" {
+declare module "retrium/types" {
     interface Program {
         id: string;
         dir: string;

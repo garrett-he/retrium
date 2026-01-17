@@ -1,5 +1,5 @@
 import {contextBridge, ipcRenderer} from "electron";
-import {Program, ProgramProcess, ProgramSummary, DosboxVersionConfig, ProgramRunOptions} from "dostron/types";
+import {Program, ProgramProcess, ProgramSummary, DosboxVersionConfig, ProgramRunOptions} from "retrium/types";
 
 contextBridge.exposeInMainWorld("$api", {
     discoverPrograms: async (): Promise<Program> => ipcRenderer.invoke("discoverPrograms"),

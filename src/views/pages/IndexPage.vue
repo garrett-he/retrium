@@ -2,7 +2,7 @@
 import {computed, ref} from "vue";
 import {useStore} from "vuex";
 
-import {Program} from "dostron/types";
+import {Program} from "retrium/types";
 import PageHeader from "@/components/PageHeader.vue";
 import ProgramCard from "@/components/ProgramCard.vue";
 import api from "@/api";

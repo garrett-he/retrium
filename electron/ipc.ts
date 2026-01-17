@@ -2,8 +2,8 @@ import fs from "fs-extra";
 import path from "node:path";
 import {ipcMain, shell, dialog, SaveDialogOptions, OpenDialogOptions} from "electron";
 import watch from "node-watch";
-import {Program, ProgramProcess, ProgramSummary, DosboxVersionConfig, ProgramRunOptions} from "dostron/types";
-import {discoverPrograms, ProcessManager, archiveProgram, extractProgramArchive, getProgramSummary, setProgramSummary, restoreProgramStates} from "./dostron";
+import {Program, ProgramProcess, ProgramSummary, DosboxVersionConfig, ProgramRunOptions} from "retrium/types";
+import {discoverPrograms, ProcessManager, archiveProgram, extractProgramArchive, getProgramSummary, setProgramSummary, restoreProgramStates} from "./retrium";
 import config from "./config";
 
 const programsDir = path.join(config.get("library"), "programs");

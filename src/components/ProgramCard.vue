@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import {PropType} from "vue";
 import ProgramCover from "./ProgramCover.vue";
-import {Program} from "dostron/types";
+import {Program} from "retrium/types";
 
 const props = defineProps({
     program: {

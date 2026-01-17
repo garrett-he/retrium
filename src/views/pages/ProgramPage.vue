@@ -3,7 +3,7 @@ import {computed, ref, toRaw, onMounted} from "vue";
 import {useRoute, useRouter} from "vue-router";
 import {useStore} from "vuex";
 
-import {Program, ProgramProcess, ProgramSummary, ProgramRunOptions} from "dostron/types";
+import {Program, ProgramProcess, ProgramSummary, ProgramRunOptions} from "retrium/types";
 import PageHeader from "@/components/PageHeader.vue";
 import ProgramCover from "@/components/ProgramCover.vue";
 import api from "@/api";

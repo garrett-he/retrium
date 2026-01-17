@@ -3,7 +3,7 @@ import path from "node:path";
 import {execFile} from "node:child_process";
 import archiver from "archiver";
 import extractZip from "extract-zip";
-import {Program, ProgramInfo, ProgramProcess, ProgramSummary} from "dostron/types";
+import {Program, ProgramInfo, ProgramProcess, ProgramSummary} from "retrium/types";
 
 export function discoverPrograms(dir: string): Program[] {
     return fs.readdirSync(dir, {withFileTypes: true})
@@ -26,7 +26,7 @@ function loadProgramInfo(dir: string): ProgramInfo {
 }
 
 function getDataDirectoryPath(base: string): string {
-    return path.resolve(base, ".dostron");
+    return path.resolve(base, ".retrium");
 }
 
 function locateProgramCover(dir: string): string | undefined {
@@ -114,7 +114,7 @@ export class ProcessManager {
     public runProgram(program: Program, dosbox: string): ProgramProcess {
         const args = [
             "-conf",
-            path.resolve(program.dir, ".dostron", "dosbox.conf")
+            path.resolve(program.dir, ".retrium", "dosbox.conf")
         ];
 
         const process = <ProgramProcess>execFile(dosbox, args, {cwd: program.dir});

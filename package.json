@@ -1,5 +1,5 @@
 {
-    "name": "dostron",
+    "name": "retrium",
     "version": "0.1.0",
     "description": "A cross-platform application to organise your collection of old programs for DOSBox.",
     "private": true,
@@ -16,7 +16,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/garrett-he/dostron.git"
+        "url": "git+https://github.com/garrett-he/retrium.git"
     },
     "keywords": [
         "dos",
@@ -26,9 +26,9 @@
     "author": "Garrett HE <garrett.he@outlook.com>",
     "license": "GPL-3.0",
     "bugs": {
-        "url": "https://github.com/garrett-he/dostron/issues"
+        "url": "https://github.com/garrett-he/retrium/issues"
     },
-    "homepage": "https://github.com/garrett-he/dostron#readme",
+    "homepage": "https://github.com/garrett-he/retrium#readme",
     "dependencies": {
         "ant-design-vue": "^4.2.3",
         "archiver": "^7.0.1",

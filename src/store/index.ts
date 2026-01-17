@@ -1,5 +1,5 @@
 import {createStore} from "vuex";
-import {Program, DosboxVersionConfig} from "dostron/types";
+import {Program, DosboxVersionConfig} from "retrium/types";
 
 export default createStore({
     state: () => ({

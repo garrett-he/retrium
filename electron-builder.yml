@@ -1,6 +1,6 @@
 ---
-productName: dostron
-appId: dostron
+productName: Retrium
+appId: retrium
 files:
   - dist/
   - dist-electron/

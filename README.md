@@ -1,4 +1,4 @@
-# dostron
+# retrium
 
 A cross-platform application to organise your collection of old programs for
 DOSBox.
