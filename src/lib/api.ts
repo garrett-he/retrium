@@ -1,5 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { DosboxVersionConfig, Program, ProgramProcess, ProgramRunOptions, ProgramSummary } from "@/types";
+import type {
+    DosboxVersionConfig,
+    Program,
+    ProgramProcess,
+    ProgramRunOptions,
+    ProgramSummary,
+    SetupState,
+} from "@/types";
 
 export const api = {
     discoverPrograms: () => invoke<Program[]>("discover_programs"),
@@ -12,4 +19,8 @@ export const api = {
     getProgramProcess: (program: Program) => invoke<ProgramProcess | null>("get_program_process", { program }),
     getProgramSummary: (program: Program) => invoke<ProgramSummary | null>("get_program_summary", { program }),
     getDosboxVersions: () => invoke<DosboxVersionConfig>("get_dosbox_versions"),
+    getSetupState: () => invoke<SetupState>("get_setup_state"),
+    completeSetup: (library: string, dosbox: string) => invoke<void>("complete_setup", { library, dosbox }),
+    pickLibraryDirectory: () => invoke<string | null>("pick_library_directory"),
+    pickDosboxExecutable: () => invoke<string | null>("pick_dosbox_executable"),
 };

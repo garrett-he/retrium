@@ -2,6 +2,7 @@ pub mod commands;
 pub mod config;
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
@@ -87,6 +88,8 @@ pub struct ProcessHandle {
 
 pub struct AppState {
     pub config: Mutex<config::Config>,
+    /// Whether the config file existed and was valid at startup.
+    pub configured: AtomicBool,
     pub processes: Mutex<HashMap<String, ProcessHandle>>,
 }
 
@@ -96,9 +99,13 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let config = config::Config::load();
+            let (config, configured) = match config::Config::load() {
+                Some(config) => (config, true),
+                None => (config::Config::default(), false),
+            };
             app.manage(AppState {
                 config: Mutex::new(config),
+                configured: AtomicBool::new(configured),
                 processes: Mutex::new(HashMap::new()),
             });
             Ok(())
@@ -114,6 +121,10 @@ pub fn run() {
             commands::get_program_process,
             commands::get_program_summary,
             commands::get_dosbox_versions,
+            commands::get_setup_state,
+            commands::complete_setup,
+            commands::pick_library_directory,
+            commands::pick_dosbox_executable,
         ])
         .run(tauri::generate_context!())
         .expect("error while running retrium application");

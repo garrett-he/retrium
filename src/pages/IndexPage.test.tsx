@@ -7,6 +7,9 @@ import { IndexPage } from "./IndexPage";
 vi.mock("@tauri-apps/api/core", () => ({
     convertFileSrc: vi.fn((path: string) => path),
     invoke: vi.fn(async (cmd: string) => {
+        if (cmd === "get_setup_state") {
+            return { configured: true, library: "/games", dosbox: "/usr/bin/dosbox" };
+        }
         if (cmd === "discover_programs") {
             return [
                 { id: "doom", dir: "/games/doom", info: { name: "Doom", category: "Games" } },

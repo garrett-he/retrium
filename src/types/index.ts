@@ -33,3 +33,9 @@ export interface ProgramRunOptions {
 }
 
 export type DosboxVersionConfig = Record<string, string>;
+
+export interface SetupState {
+    configured: boolean;
+    library: string;
+    dosbox: string;
+}

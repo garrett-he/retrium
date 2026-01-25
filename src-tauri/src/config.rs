@@ -80,20 +80,10 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Load the configuration from disk, creating a default config file when missing.
-    pub fn load() -> Config {
-        let path = config_path();
-        if path.exists() {
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(config) = serde_json::from_str::<Config>(&content) {
-                    return config;
-                }
-            }
-        }
-
-        let config = Config::default();
-        let _ = config.save();
-        config
+    /// Load the configuration from disk, returning `None` when it is missing or invalid.
+    pub fn load() -> Option<Config> {
+        let content = fs::read_to_string(config_path()).ok()?;
+        serde_json::from_str::<Config>(&content).ok()
     }
 
     /// Persist the configuration to disk as pretty-printed JSON.

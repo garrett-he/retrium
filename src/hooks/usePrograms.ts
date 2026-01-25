@@ -1,10 +1,11 @@
 import { createContext, createElement, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { DosboxVersionConfig, Program } from "@/types";
+import type { DosboxVersionConfig, Program, SetupState } from "@/types";
 
 export function usePrograms() {
     const [programs, setPrograms] = useState<Program[]>([]);
     const [dosboxVersions, setDosboxVersions] = useState<DosboxVersionConfig>({});
+    const [setupState, setSetupState] = useState<SetupState | null>(null);
     const [loading, setLoading] = useState(true);
 
     const refresh = useCallback(async () => {
@@ -15,11 +16,22 @@ export function usePrograms() {
         setDosboxVersions(await api.getDosboxVersions());
     }, []);
 
+    const completeSetup = useCallback(
+        async (library: string, dosbox: string) => {
+            await api.completeSetup(library, dosbox);
+            setSetupState({ configured: true, library, dosbox });
+            await Promise.all([refresh(), loadVersions()]);
+        },
+        [refresh, loadVersions],
+    );
+
     useEffect(() => {
-        Promise.all([refresh(), loadVersions()]).finally(() => setLoading(false));
+        Promise.all([refresh(), loadVersions(), api.getSetupState().then(setSetupState)]).finally(() =>
+            setLoading(false),
+        );
     }, [refresh, loadVersions]);
 
-    return { programs, dosboxVersions, loading, refresh };
+    return { programs, dosboxVersions, setupState, loading, refresh, completeSetup };
 }
 
 type ProgramsContextValue = ReturnType<typeof usePrograms>;

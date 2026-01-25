@@ -1,13 +1,15 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use notify::Watcher;
+use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
-use crate::config::Config;
+use crate::config::{Config, DosboxConfig};
 use crate::{
     AppState, DosboxVersionConfig, ProcessHandle, Program, ProgramInfo, ProgramProcess, ProgramRunOptions,
     ProgramSummary,
@@ -492,4 +494,91 @@ pub fn get_program_summary(program: Program, state: State<'_, AppState>) -> Resu
 pub fn get_dosbox_versions(state: State<'_, AppState>) -> Result<DosboxVersionConfig, String> {
     let config = state.config.lock().map_err(|e| e.to_string())?.clone();
     Ok(config.dosbox.versions)
+}
+
+// ---------------------------------------------------------------------------
+// Setup helpers
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupState {
+    pub configured: bool,
+    pub library: String,
+    pub dosbox: String,
+}
+
+/// Return whether the app is configured, plus the values to prefill on first run.
+#[tauri::command]
+pub fn get_setup_state(state: State<'_, AppState>) -> Result<SetupState, String> {
+    let config = state.config.lock().map_err(|e| e.to_string())?;
+    let dosbox = config
+        .dosbox
+        .versions
+        .get(&config.dosbox.default)
+        .cloned()
+        .unwrap_or_default();
+
+    Ok(SetupState {
+        configured: state.configured.load(Ordering::SeqCst),
+        library: config.library.clone(),
+        dosbox,
+    })
+}
+
+/// Persist the first-run configuration and mark the app as configured.
+#[tauri::command]
+pub fn complete_setup(library: String, dosbox: String, state: State<'_, AppState>) -> Result<(), String> {
+    let library = library.trim().to_string();
+    let dosbox = dosbox.trim().to_string();
+
+    if library.is_empty() {
+        return Err("Library directory is required".to_string());
+    }
+    if dosbox.is_empty() {
+        return Err("DOSBox executable is required".to_string());
+    }
+    if !Path::new(&dosbox).is_file() {
+        return Err(format!("DOSBox executable not found: {dosbox}"));
+    }
+
+    std::fs::create_dir_all(&library).map_err(|e| format!("Failed to create library directory: {e}"))?;
+
+    let mut versions = DosboxVersionConfig::new();
+    versions.insert("dosbox".to_string(), dosbox);
+    let config = Config {
+        library,
+        dosbox: DosboxConfig {
+            default: "dosbox".to_string(),
+            versions,
+        },
+    };
+    config.save()?;
+
+    *state.config.lock().map_err(|e| e.to_string())? = config;
+    state.configured.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+/// Pick the library directory with the native folder dialog.
+#[tauri::command]
+pub async fn pick_library_directory(app: AppHandle) -> Result<Option<String>, String> {
+    Ok(app
+        .dialog()
+        .file()
+        .blocking_pick_folder()
+        .and_then(|path| path.into_path().ok())
+        .map(|path| path.to_string_lossy().to_string()))
+}
+
+/// Pick the DOSBox executable with the native file dialog.
+#[tauri::command]
+pub async fn pick_dosbox_executable(app: AppHandle) -> Result<Option<String>, String> {
+    let dialog = app.dialog().file();
+    #[cfg(target_os = "windows")]
+    let dialog = dialog.add_filter("DOSBox", &["exe"]);
+    Ok(dialog
+        .blocking_pick_file()
+        .and_then(|path| path.into_path().ok())
+        .map(|path| path.to_string_lossy().to_string()))
 }
