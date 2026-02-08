@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Retrium — UI Prototype (Material UI)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20..48,400,0..1" rel="stylesheet" />
+<style>
+  html, body, #root { height: 100%; margin: 0; }
+  body { background: #171412; }
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 500, 'opsz' 24;
+  }
+  .fill-icon { font-variation-settings: 'FILL' 1, 'wght' 500, 'opsz' 24; }
+  .scanlines::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,.14) 0 1px, transparent 1px 3px);
+    pointer-events: none;
+  }
+  @keyframes pulse-dot {
+    0%   { box-shadow: 0 0 0 0 rgba(102,187,106,.55); }
+    70%  { box-shadow: 0 0 0 6px rgba(102,187,106,0); }
+    100% { box-shadow: 0 0 0 0 rgba(102,187,106,0); }
+  }
+  .pulse-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #66bb6a; display: inline-block;
+    animation: pulse-dot 1.6s ease-out infinite;
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .fade-up { animation: fade-up .35s cubic-bezier(.16,1,.3,1) both; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #3a332b; border-radius: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- React 18 -->
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<!-- Emotion (required by MUI UMD) -->
+<script src="https://unpkg.com/@emotion/react@11.13.5/dist/emotion-react.umd.min.js"></script>
+<script src="https://unpkg.com/@emotion/styled@11.13.5/dist/emotion-styled.umd.min.js"></script>
+<!-- Material UI -->
+<script src="https://unpkg.com/@mui/material@5.16.7/umd/material-ui.production.min.js"></script>
+<!-- Babel standalone for in-browser JSX -->
+<script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const {
+  ThemeProvider, CssBaseline, createTheme,
+  AppBar, Toolbar, Box, Typography, Button, IconButton, Icon,
+  TextField, InputAdornment, Chip, MenuItem, Select, FormControl,
+  Card, CardActionArea, Paper, Stack, Divider,
+  Stepper, Step, StepLabel, Menu, Tooltip, Fab,
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
+  Snackbar, Alert, Container, useMediaQuery,
+} = MaterialUI;
+
+/* ---------------------------------- theme --------------------------------- */
+
+const theme = createTheme({
+  palette: {
+    mode: "dark",
+    primary:   { main: "#FFB300", contrastText: "#241A05" },
+    secondary: { main: "#8FBFAF", contrastText: "#10201B" },
+    success:   { main: "#66BB6A" },
+    error:     { main: "#E57368" },
+    background: { default: "#171412", paper: "#1F1B17" },
+    text: { primary: "#ECE5DA", secondary: "#A89C8C" },
+    divider: "rgba(236,229,218,0.12)",
+  },
+  shape: { borderRadius: 12 },
+  typography: {
+    fontFamily: '"IBM Plex Sans", sans-serif',
+    h4: { fontWeight: 700, letterSpacing: "-0.01em" },
+    h5: { fontWeight: 700 },
+    h6: { fontWeight: 600 },
+    button: { fontWeight: 600, textTransform: "none" },
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: { root: { borderRadius: 10, paddingInline: 18 } },
+    },
+    MuiPaper: {
+      styleOverrides: { root: { backgroundImage: "none" } },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          backgroundImage: "none",
+          border: "1px solid rgba(236,229,218,0.08)",
+          transition: "transform .25s cubic-bezier(.16,1,.3,1), box-shadow .25s cubic-bezier(.16,1,.3,1)",
+        },
+      },
+    },
+  },
+});
+
+/* ---------------------------------- data ---------------------------------- */
+
+const DOSBOX_VERSIONS = ["0.74-3", "DOSBox-X 2024.12", "Staging 0.81"];
+
+const PROGRAMS = [
+  { id: "doom", name: "DOOM", year: 1993, category: "Action", language: "English",
+    developer: "id Software", publisher: "GT Interactive", series: "DOOM",
+    tags: ["FPS", "Shareware", "Moddable"], seconds: 55320, runs: 87,
+    lastRun: "2026-10-31 21:14", running: true, dir: "C:\\Games\\DOOM",
+    glyph: "skull", from: "#3B2411", to: "#8A4D12" },
+  { id: "pop", name: "Prince of Persia", year: 1990, category: "Action", language: "English",
+    developer: "Broderbund", publisher: "Broderbund", series: "Prince of Persia",
+    tags: ["Platformer", "Cinematic"], seconds: 13020, runs: 41,
+    lastRun: "2026-09-18 20:02", dir: "C:\\Games\\POP",
+    glyph: "directions_run", from: "#22303B", to: "#4A6A7C" },
+  { id: "civ", name: "Civilization", year: 1991, category: "Strategy", language: "English",
+    developer: "MicroProse", publisher: "MicroProse", series: "Civilization",
+    tags: ["4X", "Turn-based"], seconds: 109800, runs: 63,
+    lastRun: "2026-10-12 14:47", dir: "C:\\Games\\CIV",
+    glyph: "public", from: "#2A2E16", to: "#5C6B2A" },
+  { id: "sc2k", name: "SimCity 2000", year: 1993, category: "Simulation", language: "English",
+    developer: "Maxis", publisher: "Maxis", series: "SimCity",
+    tags: ["City builder", "Sandbox"], seconds: 41220, runs: 35,
+    lastRun: "2026-10-25 10:31", dir: "C:\\Games\\SC2000",
+    glyph: "location_city", from: "#33203A", to: "#6B4278" },
+  { id: "lemmings", name: "Lemmings", year: 1991, category: "Puzzle", language: "English",
+    developer: "DMA Design", publisher: "Psygnosis", series: "Lemmings",
+    tags: ["Puzzle", "Lemmings"], seconds: 8580, runs: 22,
+    lastRun: "2026-08-30 19:10", dir: "C:\\Games\\LEMMINGS",
+    glyph: "groups", from: "#3A2A20", to: "#8A5A38" },
+  { id: "oregon", name: "The Oregon Trail", year: 1990, category: "Simulation", language: "English",
+    developer: "MECC", publisher: "MECC", series: "Oregon Trail",
+    tags: ["Educational", "Survival"], seconds: 3120, runs: 9,
+    lastRun: "2026-06-14 16:00", dir: "C:\\Games\\OREGON",
+    glyph: "forest", from: "#1E3226", to: "#3F6B4E" },
+  { id: "keen", name: "Commander Keen 1", year: 1990, category: "Action", language: "English",
+    developer: "id Software", publisher: "Apogee", series: "Commander Keen",
+    tags: ["Platformer", "EGA"], seconds: 6420, runs: 18,
+    lastRun: "2026-07-21 11:25", dir: "C:\\Games\\KEEN1",
+    glyph: "rocket_launch", from: "#3A1E22", to: "#7C3B44" },
+  { id: "stunts", name: "Stunts", year: 1990, category: "Racing", language: "English",
+    developer: "Distinctive", publisher: "Br\u00f8derbund", series: "Stunts",
+    tags: ["Racing", "Track editor"], seconds: 4860, runs: 14,
+    lastRun: "2026-05-02 15:40", dir: "C:\\Games\\STUNTS",
+    glyph: "directions_car", from: "#26303A", to: "#4E6278" },
+  { id: "hospital", name: "Theme Hospital", year: 1997, category: "Simulation", language: "English",
+    developer: "Bullfrog", publisher: "EA", series: "Theme",
+    tags: ["Management", "Humor"], seconds: 22800, runs: 26,
+    lastRun: "2026-10-08 22:05", dir: "C:\\Games\\THOSP",
+    glyph: "local_hospital", from: "#20303A", to: "#3E6278" },
+  { id: "z", name: "Z", year: 1996, category: "Strategy", language: "English",
+    developer: "Bitmap Brothers", publisher: "Renegade", series: "Z",
+    tags: ["RTS", "Robots"], seconds: 9600, runs: 12,
+    lastRun: "2026-04-11 13:18", dir: "C:\\Games\\Z",
+    glyph: "security", from: "#33301C", to: "#6E662E" },
+];
+
+const CATEGORIES = ["All", "Action", "Strategy", "Simulation", "Puzzle", "Racing"];
+
+/* --------------------------------- helpers -------------------------------- */
+
+const fmtTime = (s) => {
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+  return h > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
+};
+
+const MsIcon = ({ children, sx, filled, ...rest }) => (
+  <Icon baseClassName="material-symbols-outlined" className={filled ? "fill-icon" : undefined} sx={sx} {...rest}>
+    {children}
+  </Icon>
+);
+
+/* --------------------------------- cover art ------------------------------- */
+
+function CoverArt({ program, height, glyphSize = 64, radius = 0 }) {
+  return (
+    <Box className="scanlines" sx={{
+      position: "relative", height, borderRadius: radius, overflow: "hidden",
+      background: `linear-gradient(155deg, ${program.from} 0%, ${program.to} 100%)`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <MsIcon filled sx={{ fontSize: glyphSize, color: "rgba(255,242,214,0.42)" }}>{program.glyph}</MsIcon>
+    </Box>
+  );
+}
+
+/* --------------------------------- app bar -------------------------------- */
+
+function TopBar({ onHome, title, showBack }) {
+  return (
+    <AppBar position="sticky" elevation={0} sx={{
+      bgcolor: "rgba(31,27,23,0.92)", backdropFilter: "blur(8px)",
+      borderBottom: "1px solid", borderColor: "divider",
+    }}>
+      <Toolbar sx={{ gap: 1.5 }}>
+        {showBack && (
+          <Tooltip title="Back to library">
+            <IconButton edge="start" onClick={onHome} aria-label="Back" sx={{ color: "text.primary" }}>
+              <MsIcon>arrow_back</MsIcon>
+            </IconButton>
+          </Tooltip>
+        )}
+        <MsIcon filled sx={{ color: "primary.main", fontSize: 26 }}>terminal</MsIcon>
+        <Typography variant="h6" sx={{
+          fontFamily: '"IBM Plex Mono", monospace',
+          fontWeight: 700, letterSpacing: "0.22em", mr: "auto",
+        }}>
+          RETRIUM
+        </Typography>
+        {!showBack && (
+          <React.Fragment>
+            <Tooltip title="Rescan library">
+              <IconButton aria-label="Rescan" sx={{ color: "text.secondary" }}>
+                <MsIcon>refresh</MsIcon>
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Settings">
+              <IconButton aria-label="Settings" sx={{ color: "text.secondary" }}>
+                <MsIcon>settings</MsIcon>
+              </IconButton>
+            </Tooltip>
+          </React.Fragment>
+        )}
+      </Toolbar>
+    </AppBar>
+  );
+}
+
+/* ---------------------------------- setup --------------------------------- */
+
+function SetupScreen({ onFinish, notify }) {
+  const [step, setStep] = React.useState(0);
+  const [library, setLibrary] = React.useState("");
+  const [dosbox, setDosbox] = React.useState("");
+
+  const mockPick = (setter, sample) => () => setter(sample);
+
+  const steps = ["Library folder", "DOSBox"];
+
+  return (
+    <Box className="fade-up" sx={{ minHeight: "calc(100vh - 64px)", display: "flex", alignItems: "center", py: 6 }}>
+      <Container maxWidth="sm">
+        <Stack spacing={1} alignItems="center" sx={{ mb: 4 }}>
+          <MsIcon filled sx={{ fontSize: 44, color: "primary.main" }}>terminal</MsIcon>
+          <Typography variant="h4" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>Welcome to Retrium</Typography>
+          <Typography color="text.secondary" align="center">
+            Two quick settings and your shelf of old programs is ready.
+          </Typography>
+        </Stack>
+
+        <Paper sx={{ p: { xs: 3, sm: 4 }, border: "1px solid", borderColor: "divider" }}>
+          <Stepper activeStep={step} alternativeLabel sx={{ mb: 4 }}>
+            {steps.map((label) => (
+              <Step key={label}><StepLabel>{label}</StepLabel></Step>
+            ))}
+          </Stepper>
+
+          {step === 0 && (
+            <Stack spacing={2} className="fade-up">
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Where should Retrium keep your programs?</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Each program gets its own sub-folder here, together with saved states and metadata.
+              </Typography>
+              <TextField
+                label="Library directory" fullWidth variant="outlined" size="small"
+                placeholder="e.g. C:\\Users\\you\\Retrium"
+                value={library} onChange={(e) => setLibrary(e.target.value)}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start"><MsIcon sx={{ fontSize: 20 }}>folder</MsIcon></InputAdornment>,
+                  endAdornment: (
+                    <Button size="small" onClick={mockPick(setLibrary, "C:\\Users\\Garrett\\Retrium")}>Browse</Button>
+                  ),
+                  sx: { fontFamily: '"IBM Plex Mono", monospace' },
+                }}
+              />
+              <Button
+                variant="contained" size="large" disabled={!library.trim()}
+                onClick={() => setStep(1)} sx={{ alignSelf: "flex-end", mt: 1 }}
+              >
+                Continue
+              </Button>
+            </Stack>
+          )}
+
+          {step === 1 && (
+            <Stack spacing={2} className="fade-up">
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Which DOSBox should launch your programs?</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Point to DOSBox.exe (or the binary on macOS/Linux). You can add more versions later in Settings.
+              </Typography>
+              <TextField
+                label="DOSBox executable" fullWidth variant="outlined" size="small"
+                placeholder="e.g. C:\\DOSBox\\dosbox.exe"
+                value={dosbox} onChange={(e) => setDosbox(e.target.value)}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start"><MsIcon sx={{ fontSize: 20 }}>memory</MsIcon></InputAdornment>,
+                  endAdornment: (
+                    <Button size="small" onClick={mockPick(setDosbox, "C:\\DOSBox\\dosbox.exe")}>Browse</Button>
+                  ),
+                  sx: { fontFamily: '"IBM Plex Mono", monospace' },
+                }}
+              />
+              <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1 }}>
+                <Button onClick={() => setStep(0)}>Back</Button>
+                <Button
+                  variant="contained" size="large"
+                  disabled={!dosbox.trim()}
+                  onClick={() => { onFinish(); notify("Setup complete — library is ready", "success"); }}
+                >
+                  Get started
+                </Button>
+              </Stack>
+            </Stack>
+          )}
+        </Paper>
+      </Container>
+    </Box>
+  );
+}
+
+/* ------------------------------ program card ------------------------------ */
+
+function ProgramCard({ program, onOpen, onStop }) {
+  return (
+    <Card sx={{
+      "&:hover": { transform: "translateY(-4px)", boxShadow: "0 14px 30px -12px rgba(0,0,0,.6)" },
+      position: "relative",
+    }}>
+      <CardActionArea onClick={onOpen} sx={{ height: "100%" }}>
+        <Box sx={{ position: "relative" }}>
+          <CoverArt program={program} height={132} glyphSize={54} />
+          {program.running && (
+            <Chip
+              size="small" icon={<span className="pulse-dot" />}
+              label="Running"
+              sx={{
+                position: "absolute", top: 8, right: 8,
+                bgcolor: "rgba(23,20,18,0.85)", color: "#8FE093",
+                "& .MuiChip-icon": { width: 16, height: 16 },
+                fontFamily: '"IBM Plex Mono", monospace', fontSize: 11,
+              }}
+            />
+          )}
+        </Box>
+        <Box sx={{ p: 1.5 }}>
+          <Typography sx={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {program.name}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{
+            fontFamily: '"IBM Plex Mono", monospace',
+          }}>
+            {program.year} · {program.category}
+          </Typography>
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1 }}>
+            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
+              <MsIcon sx={{ fontSize: 15 }}>schedule</MsIcon>
+              <Typography variant="caption" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
+                {fmtTime(program.seconds)}
+              </Typography>
+            </Stack>
+            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
+              <MsIcon sx={{ fontSize: 15 }}>replay</MsIcon>
+              <Typography variant="caption" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
+                {program.runs}×
+              </Typography>
+            </Stack>
+          </Stack>
+        </Box>
+      </CardActionArea>
+      {program.running && (
+        <Tooltip title="Stop program">
+          <IconButton
+            size="small" aria-label="Stop"
+            onClick={(e) => { e.stopPropagation(); onStop(); }}
+            sx={{ position: "absolute", top: 8, left: 8, bgcolor: "rgba(23,20,18,0.85)", color: "#E57368" }}
+          >
+            <MsIcon sx={{ fontSize: 18 }}>stop_circle</MsIcon>
+          </IconButton>
+        </Tooltip>
+      )}
+    </Card>
+  );
+}
+
+/* --------------------------------- library -------------------------------- */
+
+function LibraryScreen({ programs, onOpen, onRun, onStop, notify }) {
+  const [query, setQuery] = React.useState("");
+  const [category, setCategory] = React.useState("All");
+  const [sort, setSort] = React.useState("recent");
+
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let list = programs.filter((p) => {
+      const inCategory = category === "All" || p.category === category;
+      const inQuery = !q || [p.name, p.developer, ...(p.tags || [])].join(" ").toLowerCase().includes(q);
+      return inCategory && inQuery;
+    });
+    list = [...list].sort((a, b) => {
+      if (sort === "name") return a.name.localeCompare(b.name);
+      if (sort === "year") return a.year - b.year;
+      return b.lastRun.localeCompare(a.lastRun);
+    });
+    return list;
+  }, [programs, query, category, sort]);
+
+  const totalSeconds = programs.reduce((acc, p) => acc + p.seconds, 0);
+  const runningCount = programs.filter((p) => p.running).length;
+
+  const stats = [
+    { icon: "apps", label: "Programs", value: String(programs.length) },
+    { icon: "schedule", label: "Total playtime", value: fmtTime(totalSeconds) },
+    { icon: "play_circle", label: "Running now", value: String(runningCount) },
+    { icon: "category", label: "Categories", value: String(new Set(programs.map((p) => p.category)).size) },
+  ];
+
+  return (
+    <React.Fragment>
+    <Box className="fade-up">
+      <Container maxWidth="lg" sx={{ py: 3 }}>
+        {/* overview strip */}
+        <Box sx={{
+          display: "grid", gap: 2, mb: 3,
+          gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)" },
+        }}>
+          {stats.map((s) => (
+            <Paper key={s.label} variant="outlined" sx={{ px: 2, py: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}>
+              <MsIcon sx={{ color: "primary.main", fontSize: 22 }}>{s.icon}</MsIcon>
+              <Box>
+                <Typography sx={{ fontWeight: 700, fontFamily: '"IBM Plex Mono", monospace', lineHeight: 1.2 }}>
+                  {s.value}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">{s.label}</Typography>
+              </Box>
+            </Paper>
+          ))}
+        </Box>
+
+        {/* search + sort */}
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 2 }}>
+          <TextField
+            size="small" fullWidth placeholder="Search by name, developer or tag…"
+            value={query} onChange={(e) => setQuery(e.target.value)}
+            InputProps={{
+              startAdornment: <InputAdornment position="start"><MsIcon sx={{ fontSize: 20 }}>search</MsIcon></InputAdornment>,
+              endAdornment: query && (
+                <InputAdornment position="end">
+                  <IconButton size="small" aria-label="Clear search" onClick={() => setQuery("")}>
+                    <MsIcon sx={{ fontSize: 18 }}>close</MsIcon>
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+          />
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <Select value={sort} onChange={(e) => setSort(e.target.value)} startAdornment={
+              <InputAdornment position="start" sx={{ pl: 0.5 }}>
+                <MsIcon sx={{ fontSize: 18, color: "text.secondary" }}>sort</MsIcon>
+              </InputAdornment>
+            }>
+              <MenuItem value="recent">Recently played</MenuItem>
+              <MenuItem value="name">Name A–Z</MenuItem>
+              <MenuItem value="year">Release year</MenuItem>
+            </Select>
+          </FormControl>
+        </Stack>
+
+        {/* category chips */}
+        <Stack direction="row" spacing={1} sx={{ mb: 3, flexWrap: "wrap", rowGap: 1 }}>
+          {CATEGORIES.map((cat) => {
+            const count = cat === "All"
+              ? programs.length
+              : programs.filter((p) => p.category === cat).length;
+            if (count === 0) return null;
+            return (
+              <Chip
+                key={cat} label={`${cat} ${count}`}
+                clickable onClick={() => setCategory(cat)}
+                color={category === cat ? "primary" : "default"}
+                variant={category === cat ? "filled" : "outlined"}
+                sx={{ fontFamily: '"IBM Plex Mono", monospace', fontSize: 12.5 }}
+              />
+            );
+          })}
+        </Stack>
+
+        {/* grid */}
+        {filtered.length > 0 ? (
+          <Box sx={{
+            display: "grid", gap: 2,
+            gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)", lg: "repeat(4, 1fr)" },
+          }}>
+            {filtered.map((p) => (
+              <ProgramCard key={p.id} program={p} onOpen={() => onOpen(p)} onStop={() => { onStop(p); notify(`${p.name} stopped`, "info"); }} />
+            ))}
+          </Box>
+        ) : (
+          <Paper variant="outlined" sx={{ py: 8, textAlign: "center" }}>
+            <MsIcon sx={{ fontSize: 44, color: "text.secondary" }}>search_off</MsIcon>
+            <Typography variant="h6" sx={{ mt: 1 }}>Nothing on this shelf</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              No program matches your filters.
+            </Typography>
+            <Button onClick={() => { setQuery(""); setCategory("All"); }}>Clear filters</Button>
+          </Paper>
+        )}
+      </Container>
+      </Box>
+
+      <Tooltip title="Add programs from library folder">
+        <Fab
+          color="primary" aria-label="Add programs"
+          onClick={() => notify("Scan finished — 2 new programs added", "success")}
+          sx={{ position: "fixed", right: 24, bottom: 24 }}
+        >
+          <MsIcon>add</MsIcon>
+        </Fab>
+      </Tooltip>
+    </React.Fragment>
+  );
+}
+
+/* ------------------------------ detail screen ------------------------------ */
+
+function DetailScreen({ program, onHome, onRun, onStop, onNotify }) {
+  const [anchorEl, setAnchorEl] = React.useState(null);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+
+  const infoRows = [
+    ["Category", program.category], ["Release", program.year], ["Language", program.language],
+  ];
+  const extraRows = [
+    ["Developer", program.developer], ["Publisher", program.publisher],
+    ["Series", program.series], ["Directory", program.dir],
+  ];
+
+  const statCards = [
+    { icon: "event", label: "Last run", value: program.lastRun || "—" },
+    { icon: "schedule", label: "Total playtime", value: fmtTime(program.seconds) },
+    { icon: "replay", label: "Times played", value: `${program.runs}×` },
+  ];
+
+  return (
+    <Box className="fade-up">
+      <Container maxWidth="lg" sx={{ py: 3 }}>
+        {/* hero */}
+        <Box sx={{ position: "relative", mb: 3 }}>
+          <CoverArt program={program} height={230} glyphSize={96} radius="16px" />
+          <Box sx={{
+            position: "absolute", inset: 0, borderRadius: "16px",
+            background: "linear-gradient(180deg, transparent 40%, rgba(20,17,14,0.9) 100%)",
+            display: "flex", flexDirection: "column", justifyContent: "flex-end", p: 2.5,
+          }}>
+            <Typography variant="h4">{program.name}</Typography>
+            <Typography variant="body2" sx={{
+              color: "rgba(236,229,218,0.85)", fontFamily: '"IBM Plex Mono", monospace',
+            }}>
+              {program.year} · {program.category} · {program.developer}
+            </Typography>
+          </Box>
+          {program.running && (
+            <Chip
+              icon={<span className="pulse-dot" />} label="Running"
+              sx={{ position: "absolute", top: 14, right: 14, bgcolor: "rgba(23,20,18,0.9)", color: "#8FE093", fontFamily: '"IBM Plex Mono", monospace' }}
+            />
+          )}
+        </Box>
+
+        {/* actions */}
+        <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", rowGap: 1.5, mb: 4 }} useFlexGap>
+          {program.running ? (
+            <Button variant="contained" color="error" startIcon={<MsIcon>stop</MsIcon>}
+              onClick={() => { onStop(program); onNotify(`${program.name} stopped`, "info"); }}>
+              Stop
+            </Button>
+          ) : (
+            <React.Fragment>
+              <ButtonGroupish
+                versions={DOSBOX_VERSIONS} anchorEl={anchorEl} setAnchorEl={setAnchorEl}
+                onRun={(v) => { onRun(program, v); onNotify(`Launched ${program.name} in DOSBox ${v}`, "success"); }}
+              />
+            </React.Fragment>
+          )}
+          <Button variant="outlined" startIcon={<MsIcon>folder_open</MsIcon>}
+            onClick={() => onNotify(`Opened ${program.dir}`, "info")}>
+            Browse
+          </Button>
+          <Button variant="outlined" startIcon={<MsIcon>archive</MsIcon>}
+            onClick={() => onNotify(`Archiving ${program.name}…`, "info")}>
+            Export
+          </Button>
+          <Button variant="outlined" color="error" startIcon={<MsIcon>delete</MsIcon>}
+            onClick={() => setConfirmOpen(true)} sx={{ ml: "auto" }}>
+            Delete
+          </Button>
+        </Stack>
+
+        {/* stats */}
+        <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" }, mb: 4 }}>
+          {statCards.map((s) => (
+            <Paper key={s.label} variant="outlined" sx={{ p: 2 }}>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <MsIcon sx={{ color: "primary.main" }}>{s.icon}</MsIcon>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">{s.label}</Typography>
+                  <Typography sx={{
+                    fontWeight: 600, fontFamily: '"IBM Plex Mono", monospace', fontSize: 15,
+                  }}>
+                    {s.value}
+                  </Typography>
+                </Box>
+              </Stack>
+            </Paper>
+          ))}
+        </Box>
+
+        {/* info */}
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 3 }}>
+          <Paper variant="outlined" sx={{ p: 2.5, flex: 1 }}>
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>Information</Typography>
+            {infoRows.map(([k, v]) => (
+              <InfoRow key={k} k={k} v={v} />
+            ))}
+          </Paper>
+          <Paper variant="outlined" sx={{ p: 2.5, flex: 1.4 }}>
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>Extra information</Typography>
+            {extraRows.map(([k, v]) => (
+              <InfoRow key={k} k={k} v={v} mono={k === "Directory"} />
+            ))}
+          </Paper>
+        </Stack>
+
+        {/* tags */}
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+          {(program.tags || []).map((t) => (
+            <Chip key={t} label={t} size="small" variant="outlined"
+              sx={{ borderColor: "rgba(255,179,0,0.45)", color: "#FFD54F", fontFamily: '"IBM Plex Mono", monospace' }} />
+          ))}
+        </Stack>
+      </Container>
+
+      {/* delete confirmation */}
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>Delete “{program.name}”?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            The folder <strong>{program.dir}</strong> and its saved states will be removed permanently.
+            This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={() => {
+            setConfirmOpen(false);
+            onNotify(`${program.name} deleted`, "error");
+            onHome();
+          }}>
+            Delete permanently
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+function InfoRow({ k, v, mono }) {
+  return (
+    <Stack direction="row" sx={{ py: 0.75, borderBottom: "1px dashed", borderColor: "divider", ":last-child": { borderBottom: "none" } }}>
+      <Typography variant="body2" color="text.secondary" sx={{ width: 110, flexShrink: 0 }}>{k}</Typography>
+      <Typography variant="body2" sx={{
+        fontWeight: 500,
+        fontFamily: mono ? '"IBM Plex Mono", monospace' : undefined,
+        wordBreak: "break-all",
+      }}>
+        {v || "—"}
+      </Typography>
+    </Stack>
+  );
+}
+
+/* Run split button with version dropdown */
+function ButtonGroupish({ versions, anchorEl, setAnchorEl, onRun }) {
+  const open = Boolean(anchorEl);
+  const disabled = versions.length === 0;
+  return (
+    <React.Fragment>
+      <Stack direction="row" spacing={0}>
+        <Button
+          variant="contained" startIcon={<MsIcon>play_arrow</MsIcon>}
+          disabled={disabled}
+          onClick={() => onRun(versions[0])}
+          sx={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+        >
+          Run {versions[0] ? `· ${versions[0].split(" ")[0]}` : ""}
+        </Button>
+        <Button
+          variant="contained" aria-label="Choose DOSBox version"
+          disabled={disabled}
+          onClick={(e) => setAnchorEl(e.currentTarget)}
+          sx={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, minWidth: 0, px: 1,
+                borderLeft: "1px solid rgba(0,0,0,0.25)" }}
+        >
+          <MsIcon>expand_more</MsIcon>
+        </Button>
+      </Stack>
+      <Menu anchorEl={anchorEl} open={open} onClose={() => setAnchorEl(null)}>
+        <Typography variant="caption" color="text.secondary" sx={{ pl: 2, display: "block", pt: 0.5 }}>
+          DOSBox version
+        </Typography>
+        {versions.map((v) => (
+          <MenuItem key={v} onClick={() => { setAnchorEl(null); onRun(v); }}
+            sx={{ fontFamily: '"IBM Plex Mono", monospace', fontSize: 13.5 }}>
+            {v}
+          </MenuItem>
+        ))}
+      </Menu>
+    </React.Fragment>
+  );
+}
+
+/* ------------------------------- demo switcher ----------------------------- */
+
+function ScreenSwitcher({ screen, setScreen }) {
+  const items = [["setup", "Setup"], ["library", "Library"], ["detail", "Detail"]];
+  return (
+    <Paper elevation={6} sx={{
+      position: "fixed", left: 20, bottom: 20, zIndex: 1200,
+      px: 1.5, py: 0.75, display: "flex", alignItems: "center", gap: 0.75,
+      borderRadius: "10px", border: "1px solid", borderColor: "divider",
+      bgcolor: "rgba(31,27,23,0.95)",
+    }}>
+      <MsIcon sx={{ fontSize: 16, color: "text.secondary" }}>layers</MsIcon>
+      {items.map(([key, label]) => (
+        <Button
+          key={key} size="small" onClick={() => setScreen(key)}
+          variant={screen === key ? "contained" : "text"}
+          color={screen === key ? "primary" : "inherit"}
+          sx={{ minWidth: 0, px: 1.25, fontSize: 12, color: screen === key ? undefined : "text.secondary" }}
+        >
+          {label}
+        </Button>
+      ))}
+    </Paper>
+  );
+}
+
+/* ----------------------------------- app ----------------------------------- */
+
+function App() {
+  const [screen, setScreen] = React.useState("library");
+  const [programs, setPrograms] = React.useState(PROGRAMS);
+  const [currentId, setCurrentId] = React.useState("doom");
+  const [snack, setSnack] = React.useState(null);
+
+  const notify = (message, severity = "info") => setSnack({ message, severity, key: Date.now() });
+  const current = programs.find((p) => p.id === currentId);
+
+  const openProgram = (p) => { setCurrentId(p.id); setScreen("detail"); };
+  const runProgram = (p, version) =>
+    setPrograms((list) => list.map((x) => (x.id === p.id ? { ...x, running: true } : x)));
+  const stopProgram = (p) =>
+    setPrograms((list) => list.map((x) => (x.id === p.id ? { ...x, running: false } : x)));
+
+  const goHome = () => setScreen("library");
+
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <TopBar showBack={screen === "detail"} onHome={goHome} />
+      <Box sx={{ pb: 10 }}>
+        {screen === "setup" && (
+          <SetupScreen onFinish={goHome} notify={notify} />
+        )}
+        {screen === "library" && (
+          <LibraryScreen
+            programs={programs} onOpen={openProgram} onRun={runProgram} onStop={stopProgram} notify={notify}
+          />
+        )}
+        {screen === "detail" && current && (
+          <DetailScreen
+            program={current} onHome={goHome} onRun={runProgram} onStop={stopProgram} onNotify={notify}
+          />
+        )}
+      </Box>
+
+      <ScreenSwitcher screen={screen} setScreen={setScreen} />
+
+      <Snackbar
+        key={snack && snack.key}
+        open={!!snack}
+        autoHideDuration={3200}
+        onClose={() => setSnack(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        {snack ? (
+          <Alert onClose={() => setSnack(null)} severity={snack.severity} variant="filled"
+            sx={{ borderRadius: "8px" }}>
+            {snack.message}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
+    </ThemeProvider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
