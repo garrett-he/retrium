@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
-pub type DosboxVersionConfig = std::collections::HashMap<String, String>;
+pub use config::DosboxVersion;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Program {
@@ -21,7 +21,7 @@ pub struct Program {
     pub cover: Option<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct ProgramInfo {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -40,25 +40,15 @@ pub struct ProgramInfo {
     pub tags: Option<Vec<String>>,
 }
 
-impl Default for ProgramInfo {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            language: None,
-            release: None,
-            category: None,
-            developer: None,
-            publisher: None,
-            series: None,
-            tags: None,
-        }
-    }
-}
-
+/// A running DOSBox process tracked by Retrium.
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProgramProcess {
     pub pid: u32,
     pub program: Program,
+    pub dosbox_version: String,
+    /// RFC 3339 timestamp of when the process was launched.
+    pub started_at: String,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -78,10 +68,19 @@ pub struct ProgramRunOptions {
     pub dosbox_version: String,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DosboxVersions {
+    pub default: String,
+    pub versions: Vec<DosboxVersion>,
+}
+
 /// A running DOSBox process tracked by Retrium.
 pub struct ProcessHandle {
     pub pid: u32,
     pub program: Program,
+    pub dosbox_version: String,
+    pub started_at: chrono::DateTime<chrono::Utc>,
     /// Sending a value kills the spawned process and ends the watcher task.
     pub kill_tx: tokio::sync::oneshot::Sender<()>,
 }
@@ -114,15 +113,22 @@ pub fn run() {
             commands::discover_programs,
             commands::run_program,
             commands::stop_program,
+            commands::stop_all_programs,
+            commands::list_program_processes,
             commands::open_program_folder,
             commands::delete_program,
             commands::archive_program,
             commands::add_programs,
+            commands::update_program_info,
             commands::get_program_process,
             commands::get_program_summary,
             commands::get_dosbox_versions,
+            commands::add_dosbox_version,
+            commands::remove_dosbox_version,
+            commands::set_default_dosbox_version,
             commands::get_setup_state,
             commands::complete_setup,
+            commands::set_library_directory,
             commands::pick_library_directory,
             commands::pick_dosbox_executable,
         ])

@@ -9,10 +9,9 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
-use crate::config::{Config, DosboxConfig};
+use crate::config::Config;
 use crate::{
-    AppState, DosboxVersionConfig, ProcessHandle, Program, ProgramInfo, ProgramProcess, ProgramRunOptions,
-    ProgramSummary,
+    AppState, DosboxVersions, ProcessHandle, Program, ProgramInfo, ProgramProcess, ProgramRunOptions, ProgramSummary,
 };
 
 // ---------------------------------------------------------------------------
@@ -298,13 +297,13 @@ pub async fn run_program(
     }
 
     // Resolve the DOSBox executable for the requested version.
-    let dosbox_path = config
-        .dosbox
-        .versions
-        .get(&options.dosbox_version)
-        .cloned()
-        .or_else(|| config.dosbox.versions.get(&config.dosbox.default).cloned())
-        .ok_or_else(|| format!("DOSBox version '{}' not found in config", options.dosbox_version))?;
+    let requested = options.dosbox_version.as_str();
+    let resolved = config
+        .version(requested)
+        .or_else(|| config.default_version())
+        .ok_or_else(|| "No DOSBox version configured".to_string())?;
+    let dosbox_path = resolved.path.clone();
+    let dosbox_name = resolved.name.clone();
 
     let conf_path = program_dir.join(".retrium").join("dosbox.conf");
     let mut cmd = tokio::process::Command::new(&dosbox_path);
@@ -315,6 +314,7 @@ pub async fn run_program(
 
     let child = cmd.spawn().map_err(|e| e.to_string())?;
     let pid = child.id().ok_or_else(|| "Failed to get process id".to_string())?;
+    let started_at = chrono::Utc::now();
 
     let (kill_tx, kill_rx) = tokio::sync::oneshot::channel::<()>();
 
@@ -325,6 +325,8 @@ pub async fn run_program(
             ProcessHandle {
                 pid,
                 program: program.clone(),
+                dosbox_version: dosbox_name.clone(),
+                started_at,
                 kill_tx,
             },
         );
@@ -378,7 +380,12 @@ pub async fn run_program(
         }
     });
 
-    Ok(ProgramProcess { pid, program })
+    Ok(ProgramProcess {
+        pid,
+        program,
+        dosbox_version: dosbox_name,
+        started_at: started_at.to_rfc3339(),
+    })
 }
 
 /// Stop a running program by signalling its DOSBox process to be killed.
@@ -478,7 +485,51 @@ pub fn get_program_process(program: Program, state: State<'_, AppState>) -> Resu
     Ok(processes.get(&program.id).map(|handle| ProgramProcess {
         pid: handle.pid,
         program: handle.program.clone(),
+        dosbox_version: handle.dosbox_version.clone(),
+        started_at: handle.started_at.to_rfc3339(),
     }))
+}
+
+/// List every currently running DOSBox process.
+#[tauri::command]
+pub fn list_program_processes(state: State<'_, AppState>) -> Result<Vec<ProgramProcess>, String> {
+    let processes = state.processes.lock().map_err(|e| e.to_string())?;
+    Ok(processes
+        .values()
+        .map(|handle| ProgramProcess {
+            pid: handle.pid,
+            program: handle.program.clone(),
+            dosbox_version: handle.dosbox_version.clone(),
+            started_at: handle.started_at.to_rfc3339(),
+        })
+        .collect())
+}
+
+/// Stop every running DOSBox process, returning how many were stopped.
+#[tauri::command]
+pub fn stop_all_programs(state: State<'_, AppState>) -> Result<usize, String> {
+    let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
+    let stopped = processes.len();
+    for (_, handle) in processes.drain() {
+        let _ = handle.kill_tx.send(());
+    }
+    Ok(stopped)
+}
+
+/// Persist edited program metadata to `.retrium/info.json` on disk.
+#[tauri::command]
+pub fn update_program_info(program: Program, info: ProgramInfo) -> Result<Program, String> {
+    if info.name.trim().is_empty() {
+        return Err("Program name is required".to_string());
+    }
+
+    let dir = PathBuf::from(&program.dir);
+    let retrium_dir = dir.join(".retrium");
+    std::fs::create_dir_all(&retrium_dir).map_err(|e| e.to_string())?;
+    let content = serde_json::to_string_pretty(&info).map_err(|e| e.to_string())?;
+    std::fs::write(retrium_dir.join("info.json"), content).map_err(|e| e.to_string())?;
+
+    Ok(Program { info, ..program })
 }
 
 /// Return the run summary for a program, if any.
@@ -489,11 +540,74 @@ pub fn get_program_summary(program: Program, state: State<'_, AppState>) -> Resu
     Ok(load_summary(&path))
 }
 
-/// Return the configured DOSBox versions.
+/// Return the configured DOSBox versions together with the default one.
 #[tauri::command]
-pub fn get_dosbox_versions(state: State<'_, AppState>) -> Result<DosboxVersionConfig, String> {
+pub fn get_dosbox_versions(state: State<'_, AppState>) -> Result<DosboxVersions, String> {
     let config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    Ok(config.dosbox.versions)
+    Ok(DosboxVersions {
+        default: config.dosbox.default.clone(),
+        versions: config.dosbox.versions.clone(),
+    })
+}
+
+/// Add a DOSBox executable to the configured versions.
+#[tauri::command]
+pub fn add_dosbox_version(name: String, path: String, state: State<'_, AppState>) -> Result<(), String> {
+    let name = name.trim().to_string();
+    let path = path.trim().to_string();
+
+    if name.is_empty() {
+        return Err("Version name is required".to_string());
+    }
+    if path.is_empty() {
+        return Err("DOSBox executable path is required".to_string());
+    }
+    if !Path::new(&path).is_file() {
+        return Err(format!("DOSBox executable not found: {path}"));
+    }
+
+    let mut config = state.config.lock().map_err(|e| e.to_string())?.clone();
+    if config.version(&name).is_some() {
+        return Err(format!("DOSBox version '{name}' already exists"));
+    }
+
+    config.dosbox.versions.push(crate::DosboxVersion { name, path });
+    config.save()?;
+    *state.config.lock().map_err(|e| e.to_string())? = config;
+    Ok(())
+}
+
+/// Remove a non-default DOSBox version from the configuration.
+#[tauri::command]
+pub fn remove_dosbox_version(name: String, state: State<'_, AppState>) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?.clone();
+
+    if config.dosbox.default == name {
+        return Err("Cannot remove the default DOSBox version".to_string());
+    }
+    let before = config.dosbox.versions.len();
+    config.dosbox.versions.retain(|v| v.name != name);
+    if config.dosbox.versions.len() == before {
+        return Err(format!("DOSBox version '{name}' not found"));
+    }
+
+    config.save()?;
+    *state.config.lock().map_err(|e| e.to_string())? = config;
+    Ok(())
+}
+
+/// Set which configured DOSBox version the main Run button uses.
+#[tauri::command]
+pub fn set_default_dosbox_version(name: String, state: State<'_, AppState>) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?.clone();
+    if config.version(&name).is_none() {
+        return Err(format!("DOSBox version '{name}' not found"));
+    }
+
+    config.dosbox.default = name;
+    config.save()?;
+    *state.config.lock().map_err(|e| e.to_string())? = config;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -512,12 +626,7 @@ pub struct SetupState {
 #[tauri::command]
 pub fn get_setup_state(state: State<'_, AppState>) -> Result<SetupState, String> {
     let config = state.config.lock().map_err(|e| e.to_string())?;
-    let dosbox = config
-        .dosbox
-        .versions
-        .get(&config.dosbox.default)
-        .cloned()
-        .unwrap_or_default();
+    let dosbox = config.default_version().map(|v| v.path.clone()).unwrap_or_default();
 
     Ok(SetupState {
         configured: state.configured.load(Ordering::SeqCst),
@@ -544,19 +653,37 @@ pub fn complete_setup(library: String, dosbox: String, state: State<'_, AppState
 
     std::fs::create_dir_all(&library).map_err(|e| format!("Failed to create library directory: {e}"))?;
 
-    let mut versions = DosboxVersionConfig::new();
-    versions.insert("dosbox".to_string(), dosbox);
     let config = Config {
         library,
-        dosbox: DosboxConfig {
-            default: "dosbox".to_string(),
-            versions,
+        dosbox: crate::config::DosboxConfig {
+            default: "DOSBox".to_string(),
+            versions: vec![crate::DosboxVersion {
+                name: "DOSBox".to_string(),
+                path: dosbox,
+            }],
         },
     };
     config.save()?;
 
     *state.config.lock().map_err(|e| e.to_string())? = config;
     state.configured.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+/// Change the library directory after the initial setup.
+#[tauri::command]
+pub fn set_library_directory(library: String, state: State<'_, AppState>) -> Result<(), String> {
+    let library = library.trim().to_string();
+    if library.is_empty() {
+        return Err("Library directory is required".to_string());
+    }
+
+    std::fs::create_dir_all(&library).map_err(|e| format!("Failed to create library directory: {e}"))?;
+
+    let mut config = state.config.lock().map_err(|e| e.to_string())?.clone();
+    config.library = library.clone();
+    config.save()?;
+    *state.config.lock().map_err(|e| e.to_string())? = config;
     Ok(())
 }
 
