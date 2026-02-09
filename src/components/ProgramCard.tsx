@@ -1,24 +1,78 @@
-import { Link } from "react-router-dom";
-import { ProgramCover } from "@/components/ProgramCover";
-import type { Program } from "@/types";
+import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardActionArea from "@mui/material/CardActionArea";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import { useNavigate } from "react-router-dom";
+import { CoverArt } from "@/components/CoverArt";
+import { MsIcon } from "@/components/MsIcon";
+import { type ProgramMenuActions, ProgramMenuButton } from "@/components/ProgramMenu";
+import { RunningChip } from "@/components/RunningChip";
+import { formatPlaytime } from "@/lib/format";
+import type { Program, ProgramSummary } from "@/types";
 
 interface ProgramCardProps {
     program: Program;
+    running: boolean;
+    summary?: ProgramSummary;
+    actions: ProgramMenuActions;
 }
 
-export function ProgramCard({ program }: ProgramCardProps) {
+/** Grid card showing cover art, quick metadata and a kebab menu. */
+export function ProgramCard({ program, running, summary, actions }: ProgramCardProps) {
+    const navigate = useNavigate();
+
     return (
-        <Link
-            to={`/programs/${program.id}`}
-            className="group relative block h-[200px] w-[320px] overflow-hidden rounded-md bg-card shadow-md"
+        <Card
+            sx={{
+                position: "relative",
+                "&:hover": { transform: "translateY(-4px)", boxShadow: "0 14px 30px -12px rgba(0,0,0,.5)" },
+            }}
         >
-            <ProgramCover
+            <CardActionArea onClick={() => navigate(`/programs/${program.id}`)} sx={{ height: "100%" }}>
+                <Box sx={{ position: "relative" }}>
+                    <CoverArt program={program} height={132} glyphSize={54} />
+                    {running && (
+                        <Box sx={{ position: "absolute", top: 8, left: 8 }}>
+                            <RunningChip small />
+                        </Box>
+                    )}
+                </Box>
+                <Box sx={{ p: 1.5, pr: 4.5 }}>
+                    <Typography
+                        sx={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    >
+                        {program.info.name}
+                    </Typography>
+                    <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ fontFamily: '"IBM Plex Mono", monospace' }}
+                    >
+                        {program.info.release ?? "—"} · {program.info.category ?? "Uncategorized"}
+                    </Typography>
+                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1 }}>
+                        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
+                            <MsIcon sx={{ fontSize: 15 }}>schedule</MsIcon>
+                            <Typography variant="caption" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
+                                {summary ? formatPlaytime(summary.elapsed) : "—"}
+                            </Typography>
+                        </Stack>
+                        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
+                            <MsIcon sx={{ fontSize: 15 }}>replay</MsIcon>
+                            <Typography variant="caption" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
+                                {summary ? `${summary.runs}×` : "—"}
+                            </Typography>
+                        </Stack>
+                    </Stack>
+                </Box>
+            </CardActionArea>
+            <ProgramMenuButton
                 program={program}
-                className="h-[calc(100%+2.5rem)] w-full object-cover transition-transform duration-300 group-hover:-translate-y-10"
+                running={running}
+                actions={actions}
+                sx={{ position: "absolute", top: 6, right: 6, color: "#fff", bgcolor: "rgba(23,20,18,0.55)" }}
             />
-            <div className="absolute inset-x-0 bottom-0 flex h-10 translate-y-full items-center bg-black/70 px-3 text-sm text-white transition-transform duration-300 group-hover:translate-y-0">
-                {program.info.name}
-            </div>
-        </Link>
+        </Card>
     );
 }

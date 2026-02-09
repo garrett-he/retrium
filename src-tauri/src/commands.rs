@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
@@ -538,6 +539,30 @@ pub fn get_program_summary(program: Program, state: State<'_, AppState>) -> Resu
     let config = state.config.lock().map_err(|e| e.to_string())?.clone();
     let path = summary_path(&config.library, &program.id);
     Ok(load_summary(&path))
+}
+
+/// Return run summaries for every program that has one, keyed by program id.
+#[tauri::command]
+pub fn get_program_summaries(state: State<'_, AppState>) -> Result<HashMap<String, ProgramSummary>, String> {
+    let config = state.config.lock().map_err(|e| e.to_string())?.clone();
+    let dir = PathBuf::from(&config.library).join("summaries");
+    let mut summaries = HashMap::new();
+
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
+                if let Some(summary) = load_summary(&path) {
+                    summaries.insert(id.to_string(), summary);
+                }
+            }
+        }
+    }
+
+    Ok(summaries)
 }
 
 /// Return the configured DOSBox versions together with the default one.

@@ -122,6 +122,7 @@ pub fn run() {
             commands::update_program_info,
             commands::get_program_process,
             commands::get_program_summary,
+            commands::get_program_summaries,
             commands::get_dosbox_versions,
             commands::add_dosbox_version,
             commands::remove_dosbox_version,

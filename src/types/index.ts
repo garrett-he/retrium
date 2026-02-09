@@ -1,3 +1,13 @@
+export interface DosboxVersion {
+    name: string;
+    path: string;
+}
+
+export interface DosboxVersions {
+    default: string;
+    versions: DosboxVersion[];
+}
+
 export interface Program {
     id: string;
     dir: string;
@@ -19,6 +29,8 @@ export interface ProgramInfo {
 export interface ProgramProcess {
     pid: number;
     program: Program;
+    dosboxVersion: string;
+    startedAt: string;
 }
 
 export interface ProgramSummary {
@@ -31,8 +43,6 @@ export interface ProgramRunOptions {
     program: Program;
     dosboxVersion: string;
 }
-
-export type DosboxVersionConfig = Record<string, string>;
 
 export interface SetupState {
     configured: boolean;
