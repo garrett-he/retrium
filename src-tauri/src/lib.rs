@@ -98,6 +98,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/window-icon.png")) {
+                    let _ = window.set_icon(icon);
+                }
+            }
             let (config, configured) = match config::Config::load() {
                 Some(config) => (config, true),
                 None => (config::Config::default(), false),

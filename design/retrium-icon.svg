@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img">
+  <title>Retrium application icon</title>
+  <defs>
+    <linearGradient id="tile" x1="0.08" y1="0" x2="0.92" y2="1">
+      <stop offset="0" stop-color="#FFD05A"/>
+      <stop offset="0.45" stop-color="#FFB300"/>
+      <stop offset="1" stop-color="#DE8C00"/>
+    </linearGradient>
+    <linearGradient id="glare" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1C1611"/>
+      <stop offset="1" stop-color="#0F0C09"/>
+    </linearGradient>
+    <linearGradient id="prompt" gradientUnits="userSpaceOnUse" x1="0" y1="380" x2="0" y2="504">
+      <stop offset="0" stop-color="#FFD452"/>
+      <stop offset="1" stop-color="#FFB300"/>
+    </linearGradient>
+    <clipPath id="screenClip">
+      <rect x="264" y="280" width="496" height="324" rx="40"/>
+    </clipPath>
+  </defs>
+
+  <!-- amber squircle tile -->
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="url(#tile)"/>
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="url(#glare)"/>
+  <rect x="70" y="70" width="884" height="884" rx="202" fill="none" stroke="#FFE9B8" stroke-opacity="0.45" stroke-width="5"/>
+
+  <!-- CRT monitor body -->
+  <rect x="216" y="232" width="592" height="472" rx="64" fill="#241A05"/>
+  <rect x="222" y="238" width="580" height="460" rx="58" fill="none" stroke="#3E2C10" stroke-width="5"/>
+
+  <!-- screen -->
+  <rect x="264" y="280" width="496" height="324" rx="40" fill="url(#screen)"/>
+  <rect x="268" y="284" width="488" height="316" rx="36" fill="none" stroke="#4A3514" stroke-width="4"/>
+
+  <!-- CRT scanlines -->
+  <g clip-path="url(#screenClip)" fill="#FFF2D6" opacity="0.032">
+    <rect x="264" y="322" width="496" height="2"/>
+    <rect x="264" y="362" width="496" height="2"/>
+    <rect x="264" y="402" width="496" height="2"/>
+    <rect x="264" y="442" width="496" height="2"/>
+    <rect x="264" y="482" width="496" height="2"/>
+    <rect x="264" y="522" width="496" height="2"/>
+    <rect x="264" y="562" width="496" height="2"/>
+  </g>
+
+  <!-- amber prompt: >_ -->
+  <path d="M388 380 L464 442 L388 504" fill="none" stroke="url(#prompt)" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M512 504 H632" fill="none" stroke="url(#prompt)" stroke-width="52" stroke-linecap="round"/>
+
+  <!-- sage power LED -->
+  <circle cx="748" cy="668" r="11" fill="#8FBFAF"/>
+
+  <!-- monitor neck and base -->
+  <rect x="456" y="700" width="112" height="48" fill="#241A05"/>
+  <rect x="372" y="744" width="280" height="38" rx="19" fill="#2B1F0B"/>
+</svg>
