@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatPlaytime, formatUptime } from "./format";
+import { formatDateTime, formatPlaytime, formatUptime } from "./format";
 
 describe("formatPlaytime", () => {
     it("formats hours and minutes", () => {
@@ -12,6 +12,17 @@ describe("formatPlaytime", () => {
 
     it("rounds up stray seconds into minutes", () => {
         expect(formatPlaytime(3599)).toBe("1h 00m");
+    });
+});
+
+describe("formatDateTime", () => {
+    it("formats an ISO timestamp as YYYY-MM-DD HH:MM:SS", () => {
+        const date = new Date(2026, 0, 2, 3, 4, 5);
+        expect(formatDateTime(date.toISOString())).toBe("2026-01-02 03:04:05");
+    });
+
+    it("returns the input for invalid timestamps", () => {
+        expect(formatDateTime("not-a-date")).toBe("not-a-date");
     });
 });
 

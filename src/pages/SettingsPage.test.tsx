@@ -6,9 +6,13 @@ import { ProgramsProvider } from "@/hooks/usePrograms";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
 import { SettingsPage } from "./SettingsPage";
 
-const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
+const { invoke, openUrl } = vi.hoisted(() => ({
+    invoke: vi.fn(),
+    openUrl: vi.fn(async () => undefined),
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: vi.fn((p: string) => p), invoke }));
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
 
 function mockResponse(cmd: string) {
     if (cmd === "get_setup_state") {
@@ -63,6 +67,18 @@ describe("SettingsPage", () => {
         expect(screen.getByText("DOSBox versions")).toBeTruthy();
         expect(screen.getByText("Appearance")).toBeTruthy();
         expect(screen.getByText("GPL-3.0-or-later")).toBeTruthy();
+        expect(screen.getByText("https://github.com/garrett-he/retrium")).toBeTruthy();
+        expect(screen.queryByText("Platform")).toBeNull();
+    });
+
+    it("opens the homepage in the default browser", async () => {
+        const user = userEvent.setup();
+        renderPage();
+        await screen.findByText("https://github.com/garrett-he/retrium");
+
+        await user.click(screen.getByLabelText("Open homepage"));
+
+        expect(openUrl).toHaveBeenCalledWith("https://github.com/garrett-he/retrium");
     });
 
     it("sets a dosbox version as default via the radio", async () => {

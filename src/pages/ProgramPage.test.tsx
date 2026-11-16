@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgramsProvider } from "@/hooks/usePrograms";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
+import { formatDateTime } from "@/lib/format";
 import { ProgramPage } from "./ProgramPage";
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -80,6 +81,7 @@ describe("ProgramPage", () => {
     it("renders the hero, stats and metadata", async () => {
         renderPage();
         expect(await screen.findByRole("heading", { name: "Doom" })).toBeTruthy();
+        expect(screen.getByText(formatDateTime("2026-01-02T00:00:00Z"))).toBeTruthy();
         expect(screen.getByText("1h 30m")).toBeTruthy();
         expect(screen.getByText("3×")).toBeTruthy();
         expect(screen.getByText("id Software")).toBeTruthy();

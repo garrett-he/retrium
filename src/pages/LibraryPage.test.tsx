@@ -67,24 +67,30 @@ describe("LibraryPage", () => {
         mockBackend();
     });
 
-    it("renders the stats overview and discovered programs", async () => {
+    it("renders discovered programs without the stats overview", async () => {
         renderPage();
         expect(await screen.findByText("Doom")).toBeTruthy();
         expect(screen.getByText("Wolfenstein")).toBeTruthy();
-        expect(screen.getAllByText("1h 30m").length).toBe(2);
-        expect(screen.getByText("Programs")).toBeTruthy();
+        expect(screen.getByText("1h 30m")).toBeTruthy();
+        expect(screen.queryByText("Total playtime")).toBeNull();
+        expect(screen.queryByText("Running now")).toBeNull();
+        expect(screen.queryByText("Categories")).toBeNull();
     });
 
-    it("filters programs by category chips", async () => {
+    it("filters programs by category from the dropdown", async () => {
         const user = userEvent.setup();
         renderPage();
         await screen.findByText("Doom");
 
-        await user.click(screen.getByText("Strategy 1"));
+        await user.click(screen.getByRole("combobox", { name: "Category" }));
+        await user.click(await screen.findByRole("option", { name: "Strategy" }));
+
         expect(screen.queryByText("Doom")).toBeNull();
         expect(screen.getByText("Civilization")).toBeTruthy();
 
-        await user.click(screen.getByText("All 3"));
+        await user.click(screen.getByRole("combobox", { name: "Category" }));
+        await user.click(await screen.findByRole("option", { name: "All" }));
+
         expect(await screen.findByText("Doom")).toBeTruthy();
     });
 

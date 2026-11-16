@@ -5,6 +5,15 @@ export function formatPlaytime(seconds: number): string {
     return hours > 0 ? `${hours}h ${String(minutes).padStart(2, "0")}m` : `${minutes}m`;
 }
 
+export function formatDateTime(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return value;
+    }
+    const pad = (part: number) => String(part).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
 export function formatUptime(startedAt: string, now: number = Date.now()): string {
     const start = new Date(startedAt).getTime();
     if (Number.isNaN(start)) {

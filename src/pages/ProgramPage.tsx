@@ -20,7 +20,7 @@ import { RunSplitButton } from "@/components/RunSplitButton";
 import { useProgramsContext } from "@/hooks/usePrograms";
 import { useSnackbar } from "@/hooks/useSnackbar";
 import { api } from "@/lib/api";
-import { formatPlaytime } from "@/lib/format";
+import { formatDateTime, formatPlaytime } from "@/lib/format";
 import type { Program, ProgramInfo } from "@/types";
 
 /** Program detail: hero, run controls, stats, metadata, editing and safe delete. */
@@ -56,7 +56,7 @@ export function ProgramPage() {
 
     const info = program.info;
     const statCards = [
-        { icon: "event", label: "Last run", value: summary ? summary.lastRun : "—" },
+        { icon: "event", label: "Last run", value: summary ? formatDateTime(summary.lastRun) : "—" },
         { icon: "schedule", label: "Total playtime", value: summary ? formatPlaytime(summary.elapsed) : "—" },
         { icon: "replay", label: "Times played", value: summary ? `${summary.runs}×` : "—" },
     ];

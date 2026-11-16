@@ -1,6 +1,5 @@
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
@@ -28,10 +27,7 @@ import { ProgramRow } from "@/components/ProgramRow";
 import { useProgramsContext } from "@/hooks/usePrograms";
 import { useSnackbar } from "@/hooks/useSnackbar";
 import { api } from "@/lib/api";
-import { formatPlaytime } from "@/lib/format";
 import type { Program } from "@/types";
-
-const CATEGORIES = ["All", "Action", "Strategy", "Simulation", "Puzzle", "Racing"];
 
 type SortKey = "recent" | "name" | "year";
 
@@ -69,17 +65,10 @@ export function LibraryPage() {
         });
     }, [programs, query, category, sort, summaries]);
 
-    const totalSeconds = Object.values(summaries).reduce((acc, summary) => acc + summary.elapsed, 0);
-    const stats = [
-        { icon: "apps", label: "Programs", value: String(programs.length) },
-        { icon: "schedule", label: "Total playtime", value: formatPlaytime(totalSeconds) },
-        { icon: "play_circle", label: "Running now", value: String(processes.length) },
-        {
-            icon: "category",
-            label: "Categories",
-            value: String(new Set(programs.map((program) => program.info.category ?? "Uncategorized")).size),
-        },
-    ];
+    const categories = useMemo(() => {
+        const values = new Set(programs.map((program) => program.info.category ?? "Uncategorized"));
+        return ["All", ...[...values].sort((a, b) => a.localeCompare(b))];
+    }, [programs]);
 
     const actions: ProgramMenuActions = {
         run: (program) => {
@@ -130,35 +119,6 @@ export function LibraryPage() {
     return (
         <Box className="fade-up">
             <Box sx={{ px: 3, py: 3, maxWidth: 1200, mx: "auto" }}>
-                <Box
-                    sx={{
-                        display: "grid",
-                        gap: 2,
-                        mb: 3,
-                        gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)" },
-                    }}
-                >
-                    {stats.map((stat) => (
-                        <Paper
-                            key={stat.label}
-                            variant="outlined"
-                            sx={{ px: 2, py: 1.5, display: "flex", alignItems: "center", gap: 1.5 }}
-                        >
-                            <MsIcon sx={{ color: "primary.main", fontSize: 22 }}>{stat.icon}</MsIcon>
-                            <Box>
-                                <Typography
-                                    sx={{ fontWeight: 700, fontFamily: '"IBM Plex Mono", monospace', lineHeight: 1.2 }}
-                                >
-                                    {stat.value}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    {stat.label}
-                                </Typography>
-                            </Box>
-                        </Paper>
-                    ))}
-                </Box>
-
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 2 }}>
                     <TextField
                         size="small"
@@ -186,6 +146,20 @@ export function LibraryPage() {
                         select
                         size="small"
                         sx={{ minWidth: 180 }}
+                        label="Category"
+                        value={category}
+                        onChange={(event) => setCategory(event.target.value)}
+                    >
+                        {categories.map((cat) => (
+                            <MenuItem key={cat} value={cat}>
+                                {cat}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                    <TextField
+                        select
+                        size="small"
+                        sx={{ minWidth: 180 }}
                         label="Sort"
                         value={sort}
                         onChange={(event) => setSort(event.target.value as SortKey)}
@@ -203,33 +177,23 @@ export function LibraryPage() {
                             <MsIcon>{view === "grid" ? "view_list" : "grid_view"}</MsIcon>
                         </IconButton>
                     </Tooltip>
-                    <Button variant="contained" startIcon={<MsIcon>add</MsIcon>} disabled={adding} onClick={handleAdd}>
-                        Add programs
-                    </Button>
-                </Stack>
-
-                <Stack direction="row" spacing={1} sx={{ mb: 3, flexWrap: "wrap", rowGap: 1 }}>
-                    {CATEGORIES.map((cat) => {
-                        const count =
-                            cat === "All"
-                                ? programs.length
-                                : programs.filter((program) => (program.info.category ?? "Uncategorized") === cat)
-                                      .length;
-                        if (count === 0) {
-                            return null;
-                        }
-                        return (
-                            <Chip
-                                key={cat}
-                                label={`${cat} ${count}`}
-                                clickable
-                                onClick={() => setCategory(cat)}
-                                color={category === cat ? "primary" : "default"}
-                                variant={category === cat ? "filled" : "outlined"}
-                                sx={{ fontFamily: '"IBM Plex Mono", monospace', fontSize: 12.5 }}
-                            />
-                        );
-                    })}
+                    <Tooltip title="Add programs">
+                        <span>
+                            <IconButton
+                                aria-label="Add programs"
+                                disabled={adding}
+                                onClick={handleAdd}
+                                sx={{
+                                    borderRadius: "10px",
+                                    bgcolor: "primary.main",
+                                    color: "primary.contrastText",
+                                    "&:hover": { bgcolor: "primary.dark" },
+                                }}
+                            >
+                                <MsIcon>add</MsIcon>
+                            </IconButton>
+                        </span>
+                    </Tooltip>
                 </Stack>
 
                 {filtered.length === 0 ? (

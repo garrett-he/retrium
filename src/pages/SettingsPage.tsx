@@ -12,7 +12,8 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { type ReactNode, useState } from "react";
 import { MsIcon } from "@/components/MsIcon";
 import { useProgramsContext } from "@/hooks/usePrograms";
 import { useSnackbar } from "@/hooks/useSnackbar";
@@ -23,12 +24,14 @@ interface InfoRowProps {
     label: string;
     value: string;
     mono?: boolean;
+    action?: ReactNode;
 }
 
-function InfoRow({ label, value, mono = false }: InfoRowProps) {
+function InfoRow({ label, value, mono = false, action }: InfoRowProps) {
     return (
         <Stack
             direction="row"
+            alignItems="center"
             sx={{
                 py: 0.75,
                 borderBottom: "1px dashed",
@@ -49,6 +52,7 @@ function InfoRow({ label, value, mono = false }: InfoRowProps) {
             >
                 {value}
             </Typography>
+            {action && <Box sx={{ ml: "auto", pl: 1, display: "flex", flexShrink: 0 }}>{action}</Box>}
         </Stack>
     );
 }
@@ -238,7 +242,25 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                     </Stack>
                     <InfoRow label="Version" value="0.2.0" mono />
                     <InfoRow label="License" value="GPL-3.0-or-later" mono />
-                    <InfoRow label="Platform" value="Windows · macOS · Linux (Tauri)" />
+                    <InfoRow
+                        label="Homepage"
+                        value="https://github.com/garrett-he/retrium"
+                        action={
+                            <Tooltip title="Open homepage">
+                                <IconButton
+                                    size="small"
+                                    aria-label="Open homepage"
+                                    onClick={() =>
+                                        openUrl("https://github.com/garrett-he/retrium").catch((error) =>
+                                            notify(String(error), "error"),
+                                        )
+                                    }
+                                >
+                                    <MsIcon sx={{ fontSize: 18 }}>open_in_new</MsIcon>
+                                </IconButton>
+                            </Tooltip>
+                        }
+                    />
                 </Paper>
             </Box>
 
