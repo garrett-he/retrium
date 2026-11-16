@@ -240,7 +240,7 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                         <MsIcon sx={{ color: "primary.main" }}>info</MsIcon>
                         <Typography variant="h6">About</Typography>
                     </Stack>
-                    <InfoRow label="Version" value="0.2.0" mono />
+                    <InfoRow label="Version" value="0.2.1" mono />
                     <InfoRow label="License" value="GPL-3.0-or-later" mono />
                     <InfoRow
                         label="Homepage"

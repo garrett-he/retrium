@@ -99,7 +99,7 @@ export function Sidebar({ runningCount, mode, onModeChange }: SidebarProps) {
                     color="text.secondary"
                     sx={{ mt: 1, display: "block", fontFamily: '"IBM Plex Mono", monospace' }}
                 >
-                    v0.2.0
+                    v0.2.1
                 </Typography>
             </Box>
         </Drawer>
