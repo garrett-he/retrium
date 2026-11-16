@@ -444,6 +444,55 @@ pub async fn archive_program(program: Program, app: AppHandle) -> Result<(), Str
     Ok(())
 }
 
+/// Extract an archive into `programs_dir` and return the resulting program id.
+///
+/// When the archive contains exactly one top-level directory, that directory
+/// becomes the program directory. Otherwise the archive file name is used.
+fn import_archive(archive: &Path, programs_dir: &Path) -> Result<String, String> {
+    let temp = std::env::temp_dir().join(format!(
+        "retrium-import-{}-{}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
+    std::fs::create_dir_all(&temp).map_err(|e| e.to_string())?;
+
+    let result = (|| {
+        extract_zip(archive, &temp)?;
+
+        let entries: Vec<PathBuf> = std::fs::read_dir(&temp)
+            .map_err(|e| e.to_string())?
+            .flatten()
+            .map(|entry| entry.path())
+            .collect();
+
+        let single_dir = match entries.as_slice() {
+            [entry] if entry.is_dir() => Some(entry.clone()),
+            _ => None,
+        };
+
+        let (id, source) = match &single_dir {
+            Some(dir) => {
+                let id = dir
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(str::to_string)
+                    .ok_or_else(|| "Invalid UTF-8 in archive folder name".to_string())?;
+                (id, dir.clone())
+            }
+            None => (archive_stem(archive), temp.clone()),
+        };
+
+        let dest = programs_dir.join(&id);
+        std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+        copy_dir_contents(&source, &dest)?;
+
+        Ok(id)
+    })();
+
+    let _ = std::fs::remove_dir_all(&temp);
+    result
+}
+
 /// Import program archives chosen via an open dialog into the library.
 #[tauri::command]
 pub async fn add_programs(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<Program>, String> {
@@ -466,11 +515,7 @@ pub async fn add_programs(app: AppHandle, state: State<'_, AppState>) -> Result<
     let mut new_ids = Vec::new();
     for file in files {
         let path = file.into_path().map_err(|e| e.to_string())?;
-        let stem = archive_stem(&path);
-        let dest = programs_dir.join(&stem);
-        std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
-        extract_zip(&path, &dest)?;
-        new_ids.push(stem);
+        new_ids.push(import_archive(&path, &programs_dir)?);
     }
 
     let programs = discover_programs_inner(&config);
@@ -733,4 +778,62 @@ pub async fn pick_dosbox_executable(app: AppHandle) -> Result<Option<String>, St
         .blocking_pick_file()
         .and_then(|path| path.into_path().ok())
         .map(|path| path.to_string_lossy().to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "retrium-test-{tag}-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn import_uses_single_top_level_folder_as_program_dir() {
+        let root = scratch_dir("single-folder");
+        let source = root.join("A").join("B");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::write(source.join("xxx.exe"), b"binary").unwrap();
+
+        let archive = root.join("A.zip");
+        create_zip(&root.join("A"), &archive).unwrap();
+
+        let programs = root.join("programs");
+        std::fs::create_dir_all(&programs).unwrap();
+        let id = import_archive(&archive, &programs).unwrap();
+
+        assert_eq!(id, "B");
+        assert!(programs.join("B").join("xxx.exe").is_file());
+        assert!(!programs.join("A").exists());
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn import_falls_back_to_archive_name_for_root_entries() {
+        let root = scratch_dir("root-entries");
+        let source = root.join("files");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::write(source.join("xxx.exe"), b"binary").unwrap();
+        std::fs::write(source.join("readme.txt"), b"text").unwrap();
+
+        let archive = root.join("Game.zip");
+        create_zip(&source, &archive).unwrap();
+
+        let programs = root.join("programs");
+        std::fs::create_dir_all(&programs).unwrap();
+        let id = import_archive(&archive, &programs).unwrap();
+
+        assert_eq!(id, "Game");
+        assert!(programs.join("Game").join("xxx.exe").is_file());
+        assert!(programs.join("Game").join("readme.txt").is_file());
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 }
