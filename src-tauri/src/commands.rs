@@ -57,8 +57,11 @@ fn discover_programs_inner(config: &Config) -> Vec<Program> {
 }
 
 fn load_program_info(program_dir: &Path, fallback_name: &str) -> ProgramInfo {
-    let info_path = program_dir.join(".retrium").join("info.json");
-    if info_path.exists() {
+    let retrium_dir = program_dir.join(".retrium");
+
+    // Older Tauri builds wrote `info.json`; `metadata.json` is the canonical name.
+    for file in ["metadata.json", "info.json"] {
+        let info_path = retrium_dir.join(file);
         if let Ok(content) = std::fs::read_to_string(&info_path) {
             if let Ok(mut info) = serde_json::from_str::<ProgramInfo>(&content) {
                 if info.name.is_empty() {
@@ -562,7 +565,7 @@ pub fn stop_all_programs(state: State<'_, AppState>) -> Result<usize, String> {
     Ok(stopped)
 }
 
-/// Persist edited program metadata to `.retrium/info.json` on disk.
+/// Persist edited program metadata to `.retrium/metadata.json` on disk.
 #[tauri::command]
 pub fn update_program_info(program: Program, info: ProgramInfo) -> Result<Program, String> {
     if info.name.trim().is_empty() {
@@ -573,7 +576,7 @@ pub fn update_program_info(program: Program, info: ProgramInfo) -> Result<Progra
     let retrium_dir = dir.join(".retrium");
     std::fs::create_dir_all(&retrium_dir).map_err(|e| e.to_string())?;
     let content = serde_json::to_string_pretty(&info).map_err(|e| e.to_string())?;
-    std::fs::write(retrium_dir.join("info.json"), content).map_err(|e| e.to_string())?;
+    std::fs::write(retrium_dir.join("metadata.json"), content).map_err(|e| e.to_string())?;
 
     Ok(Program { info, ..program })
 }
@@ -833,6 +836,52 @@ mod tests {
         assert_eq!(id, "Game");
         assert!(programs.join("Game").join("xxx.exe").is_file());
         assert!(programs.join("Game").join("readme.txt").is_file());
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn loads_metadata_from_metadata_json() {
+        let root = scratch_dir("metadata");
+        let retrium = root.join(".retrium");
+        std::fs::create_dir_all(&retrium).unwrap();
+        std::fs::write(
+            retrium.join("metadata.json"),
+            r#"{"name":"Doom","release":1993,"series":null,"tags":[]}"#,
+        )
+        .unwrap();
+
+        let info = load_program_info(&root, "fallback");
+
+        assert_eq!(info.name, "Doom");
+        assert_eq!(info.release, Some(1993));
+        assert_eq!(info.tags, Some(Vec::new()));
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn loads_metadata_from_legacy_info_json() {
+        let root = scratch_dir("legacy-info");
+        let retrium = root.join(".retrium");
+        std::fs::create_dir_all(&retrium).unwrap();
+        std::fs::write(retrium.join("info.json"), r#"{"name":"Wolfenstein 3D"}"#).unwrap();
+
+        let info = load_program_info(&root, "fallback");
+
+        assert_eq!(info.name, "Wolfenstein 3D");
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn falls_back_to_folder_name_without_metadata() {
+        let root = scratch_dir("no-metadata");
+        std::fs::create_dir_all(&root).unwrap();
+
+        let info = load_program_info(&root, "GAME");
+
+        assert_eq!(info.name, "GAME");
 
         std::fs::remove_dir_all(&root).unwrap();
     }
