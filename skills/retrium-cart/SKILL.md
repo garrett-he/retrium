@@ -90,9 +90,11 @@ defaults. See `references/dosbox-tuning.md` for common scenarios and troubleshoo
 
 ### Step 4 — Add `.retrium/cover.png` (optional)
 
-Supply a real PNG file at exactly `.retrium/cover.png`. The UI renders it with `object-fit: cover` at
-several aspect ratios, so use landscape art with important content centered; the example in
-`tmp/.retrium/` is 800x600. A missing or misnamed file simply yields the built-in placeholder.
+The cover is optional; a missing or misnamed file simply yields the built-in placeholder. Ask the user for
+an existing cover image or a path to one. If supplied, convert it to a real PNG at `.retrium/cover.png`
+(ImageMagick: `magick input.jpg -resize 800x600 .retrium/cover.png`). If the user has no art, **omit the
+file** — do not synthesize or download a cover. The UI renders covers with `object-fit: cover` at several
+aspect ratios, so keep important content centered.
 
 ### Step 5 — Validate
 

@@ -73,6 +73,8 @@ Notes:
 - Any other filename or location is ignored; the UI then shows a gradient placeholder with an icon.
 - Rendered with `object-fit: cover` in cards, thumbnails, and the detail hero. Landscape art around 800x600
   with centered subjects crops well. Keep file sizes modest since covers load together in the library grid.
+- Ask the user for cover art; if none is supplied, omit the file and let the UI show its placeholder. Do
+  not synthesize or download a cover.
 
 ## `dosbox.conf`
 
