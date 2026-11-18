@@ -88,7 +88,7 @@ export function LibraryPage() {
         },
         exportArchive: (program) => {
             api.archiveProgram(program)
-                .then(() => notify(`Exported ${program.info.name}.zip`, "success"))
+                .then(() => notify(`Exported ${program.info.name}.cart`, "success"))
                 .catch((error) => notify(String(error), "error"));
         },
         delete: (program) => setDeleting(program),

@@ -172,14 +172,14 @@ describe("ProgramPage", () => {
         expect(await screen.findByText("Doom stopped")).toBeTruthy();
     });
 
-    it("exports an archive from the action row", async () => {
+    it("exports a cart from the action row", async () => {
         const user = userEvent.setup();
         renderPage();
         await screen.findByRole("heading", { name: "Doom" });
 
         await user.click(screen.getByRole("button", { name: "Export" }));
         expect(invoke).toHaveBeenCalledWith("archive_program", { program });
-        expect(await screen.findByText("Exported Doom.zip")).toBeTruthy();
+        expect(await screen.findByText("Exported Doom.cart")).toBeTruthy();
     });
 
     it("opens the program folder from the action row", async () => {

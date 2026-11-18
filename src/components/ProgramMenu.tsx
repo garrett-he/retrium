@@ -79,7 +79,7 @@ export function ProgramMenuButton({ program, running, actions, iconSize = 18, sx
                             actions.exportArchive?.(program);
                         }}
                     >
-                        <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>archive</MsIcon> Export archive
+                        <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>archive</MsIcon> Export cart
                     </MenuItem>
                 )}
                 <Divider />

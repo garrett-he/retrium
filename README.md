@@ -23,7 +23,7 @@
 - **Per-program configuration** — every program carries its own `.retrium/dosbox.conf`.
 - **Saved states** — files written while a program runs are mirrored into the library and restored on the next launch.
 - **Play tracking** — last run, number of runs and total playtime per program, plus a page of currently running programs.
-- **Import and export** — package a program folder as a zip archive and import it back into any library.
+- **Import and export** — export a program folder as a `.cart` archive and import it back into any library.
 - **First-run setup** — pick a library folder and DOSBox executable on first start; both can be changed later.
 - **Themes** — dark and light modes.
 
@@ -63,6 +63,9 @@ Retrium keeps everything inside the library folder you choose:
 └── summaries/
     └── DOOM.json               # last run, runs and elapsed time
 ```
+
+A program folder is called a **cart**. Exporting one writes a `<id>.cart` archive (zip format) that can be
+imported into any library; legacy `.zip`, `.tar.gz` and `.tgz` archives can still be imported.
 
 `metadata.json` is a plain JSON file, so libraries are easy to back up or edit by hand:
 

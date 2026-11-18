@@ -161,9 +161,9 @@ describe("LibraryPage", () => {
         expect(await screen.findByText("Opened /games/doom")).toBeTruthy();
 
         await user.click(screen.getAllByLabelText("Program menu")[0]);
-        await user.click(screen.getByText("Export archive"));
+        await user.click(screen.getByText("Export cart"));
         expect(invoke).toHaveBeenCalledWith("archive_program", expect.anything());
-        expect(await screen.findByText("Exported Doom.zip")).toBeTruthy();
+        expect(await screen.findByText("Exported Doom.cart")).toBeTruthy();
     });
 
     it("stops a running program from the card menu", async () => {

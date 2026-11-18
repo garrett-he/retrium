@@ -127,7 +127,7 @@ fn copy_dir_contents(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Create a zip archive of `src_dir` at `dest`.
+/// Create a cart (zip-format archive) of `src_dir` at `dest`.
 fn create_zip(src_dir: &Path, dest: &Path) -> Result<(), String> {
     let file = std::fs::File::create(dest).map_err(|e| e.to_string())?;
     let mut zip = zip::ZipWriter::new(file);
@@ -156,7 +156,7 @@ fn create_zip(src_dir: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Extract a zip archive at `zip_path` into `dest_dir`.
+/// Extract a cart at `zip_path` into `dest_dir`.
 fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
     let file = std::fs::File::open(zip_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
@@ -187,7 +187,7 @@ fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
 fn archive_stem(path: &Path) -> String {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("program");
 
-    for ext in [".tar.gz", ".tgz", ".zip"] {
+    for ext in [".tar.gz", ".tgz", ".cart", ".zip"] {
         if let Some(stripped) = name.strip_suffix(ext) {
             return stripped.to_string();
         }
@@ -427,15 +427,15 @@ pub fn delete_program(program: Program) -> Result<(), String> {
     Ok(())
 }
 
-/// Archive a program directory into a zip file chosen via a save dialog.
+/// Export a program directory as a .cart archive chosen via a save dialog.
 #[tauri::command]
 pub async fn archive_program(program: Program, app: AppHandle) -> Result<(), String> {
     let file_path = app
         .dialog()
         .file()
-        .add_filter("Program Packages", &["zip", "tar.gz", "tgz"])
+        .add_filter("Retrium Carts", &["cart"])
         .add_filter("All Files", &["*"])
-        .set_file_name(format!("{}.zip", program.id))
+        .set_file_name(format!("{}.cart", program.id))
         .blocking_save_file();
 
     let dest = match file_path {
@@ -496,13 +496,14 @@ fn import_archive(archive: &Path, programs_dir: &Path) -> Result<String, String>
     result
 }
 
-/// Import program archives chosen via an open dialog into the library.
+/// Import carts chosen via an open dialog into the library.
 #[tauri::command]
 pub async fn add_programs(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<Program>, String> {
     let files = app
         .dialog()
         .file()
-        .add_filter("Program Archive", &["zip", "tar.gz", "tgz"])
+        .add_filter("Retrium Carts", &["cart"])
+        .add_filter("Legacy Archives", &["zip", "tar.gz", "tgz"])
         .add_filter("All Files", &["*"])
         .blocking_pick_files();
 
@@ -804,7 +805,7 @@ mod tests {
         std::fs::create_dir_all(&source).unwrap();
         std::fs::write(source.join("xxx.exe"), b"binary").unwrap();
 
-        let archive = root.join("A.zip");
+        let archive = root.join("A.cart");
         create_zip(&root.join("A"), &archive).unwrap();
 
         let programs = root.join("programs");
@@ -826,7 +827,7 @@ mod tests {
         std::fs::write(source.join("xxx.exe"), b"binary").unwrap();
         std::fs::write(source.join("readme.txt"), b"text").unwrap();
 
-        let archive = root.join("Game.zip");
+        let archive = root.join("Game.cart");
         create_zip(&source, &archive).unwrap();
 
         let programs = root.join("programs");

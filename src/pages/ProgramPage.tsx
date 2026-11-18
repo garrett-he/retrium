@@ -92,7 +92,7 @@ export function ProgramPage() {
 
     const handleExport = () => {
         api.archiveProgram(program)
-            .then(() => notify(`Exported ${info.name}.zip`, "success"))
+            .then(() => notify(`Exported ${info.name}.cart`, "success"))
             .catch((error) => notify(String(error), "error"));
     };
 

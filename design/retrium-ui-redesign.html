@@ -1197,7 +1197,7 @@ function App() {
       notify("All emulators stopped", "info");
     },
     browse: (p) => notify(`Opened ${p.dir}`, "info"),
-    export: (p) => notify(`Archiving ${p.name} → ${p.name}.zip`, "info"),
+    export: (p) => notify(`Exporting cart ${p.name} → ${p.name}.cart`, "info"),
     edit: (p) => setEditing(p),
     delete: (p) => setDeleting(p),
     add: () => setScan({ open: true, progress: 0, found: [] }),

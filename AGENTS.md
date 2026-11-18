@@ -56,7 +56,9 @@ Run `pnpm typecheck`, `pnpm lint`, `pnpm test` for frontend changes and
   `dosbox.conf` live beside it.
 - Saved states are mirrored to `<library>/states/<id>/` and restored before a run.
 - Play summaries are stored at `<library>/summaries/<id>.json`.
-- Importing a zip with a single top-level folder uses that folder as the program
+- A program folder is called a cart; exporting writes `<id>.cart` (zip format),
+  and legacy `.zip`, `.tar.gz` and `.tgz` archives can also be imported.
+- Importing a cart with a single top-level folder uses that folder as the program
   directory; otherwise the archive file name is used.
 - Never modify a user's library data outside the app's own commands.
 
