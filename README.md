@@ -81,7 +81,7 @@ Resources/cover.png       # optional
 ```json
 {
   "version": 1,
-  "cart": { "id": "0192f0a1-…", "revision": 3, "tool": { "app": "retrium", "version": "0.2.1", "host": "windows-x86_64" }, "createdAt": "2026-01-01T00:00:00+00:00" },
+  "cart": { "id": "0192f0a1-…", "revision": 3, "tool": { "app": "retrium", "version": "1.0.0", "host": "windows-x86_64" }, "createdAt": "2026-01-01T00:00:00+00:00" },
   "program": { "name": "Doom", "release": 1993, "category": "game", "language": "en", "developer": "id Software", "tags": ["FPS"] }
 }
 ```

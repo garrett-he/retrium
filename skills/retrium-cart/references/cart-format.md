@@ -59,7 +59,7 @@ other than `1` means "a version this build cannot read". It is unrelated to `car
         "id": "0192f0a1-7c00-7000-8000-000000000001",
         "revision": 3,
         "author": { "name": "Garrett", "email": "garrett@example.com" },
-        "tool": { "app": "retrium", "version": "0.2.1", "host": "windows-x86_64" },
+        "tool": { "app": "retrium", "version": "1.0.0", "host": "windows-x86_64" },
         "createdAt": "2026-01-01T00:00:00+00:00"
     },
     "program": {

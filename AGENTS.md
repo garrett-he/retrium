@@ -97,7 +97,7 @@ Run `pnpm typecheck`, `pnpm lint`, `pnpm test` for frontend changes and
    `src-tauri/tauri.conf.json` and the `retrium` entry in `src-tauri/Cargo.lock`.
 2. Update the hardcoded version in `src/components/Sidebar.tsx`.
 3. Commit (`chore: release X.Y.Z`) and create an annotated tag with the bare
-   version, e.g. `git tag -a 0.2.1 -m "Retrium 0.2.1"`.
+   version, e.g. `git tag -a 1.0.0 -m "Retrium 1.0.0"`.
 4. Run `pnpm tauri build`; the NSIS installer appears under
    `src-tauri/target/release/bundle/nsis/`.
 5. Push `main` and the tag, then publish with
