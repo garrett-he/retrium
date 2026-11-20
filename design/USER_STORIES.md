@@ -33,15 +33,15 @@
 |-----------|---------|
 | `get_setup_state` / `complete_setup` | Setup Wizard（3 步） |
 | `pick_library_directory` / `pick_dosbox_executable` | Wizard / Settings 的 Browse 按钮 |
-| `discover_programs` | Library 首次加载 + TopBar 刷新按钮 |
-| `add_programs` | Library 工具栏"Add programs" → 扫描对话框（进度+结果） |
-| `run_program` | Run 拆分按钮：主键=默认版本，下拉=任意已配置版本 |
-| `stop_program` | Detail 页 Stop · Running 页行内 Stop · 卡片快捷停止 |
-| `open_program_folder` | Detail/卡片的 Browse（打开所在文件夹） |
-| `delete_program` | 卡片菜单/Detail 页 Delete → 确认对话框（明示不可撤销） |
-| `archive_program` | Export 按钮（归档备份） |
-| `get_program_process` | 卡片 Running 徽标 · Running 页（pid + 版本 + 运行时长） |
-| `get_program_summary` | Detail 统计卡（上次运行/累计时长/次数） |
+| `discover_carts` | Library 首次加载 + TopBar 刷新按钮 |
+| `add_carts` | Library 工具栏"Add carts" → 扫描对话框（进度+结果） |
+| `run_cart` | Run 拆分按钮：主键=默认版本，下拉=任意已配置版本 |
+| `stop_cart` | Detail 页 Stop · Running 页行内 Stop · 卡片快捷停止 |
+| `open_cart_folder` | Detail/卡片的 Browse（打开所在文件夹） |
+| `delete_cart` | 卡片菜单/Detail 页 Delete → 确认对话框（明示不可撤销） |
+| `archive_cart` | Export 按钮（归档备份） |
+| `get_cart_process` | 卡片 Running 徽标 · Running 页（pid + 版本 + 运行时长） |
+| `get_cart_summary` | Detail 统计卡（上次运行/累计时长/次数） |
 | `get_dosbox_versions` | Run 下拉菜单 · Settings 版本管理 |
 
 ## 3. 用户故事（按 Epic）
@@ -59,7 +59,7 @@
 - **US-1.6** TopBar 刷新按钮重扫库目录。
 
 ### E2 · 添加与扫描
-- **US-2.1** 🆕 "Add programs"弹出扫描对话框：进度条 + 逐步发现的新程序列表 + 结果 Snackbar。
+- **US-2.1** 🆕 "Add carts"弹出扫描对话框：进度条 + 逐步发现的新程序列表 + 结果 Snackbar。
 
 ### E3 · 运行与游玩
 - **US-3.1** 一键用默认版本启动；下拉可选任意版本。

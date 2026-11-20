@@ -11,18 +11,18 @@ use tauri::Manager;
 pub use config::DosboxVersion;
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Program {
+pub struct Cart {
     /// Directory basename used as the unique identifier.
     pub id: String,
-    /// Absolute path to the program directory.
+    /// Absolute path to the cart directory.
     pub dir: String,
-    pub info: ProgramInfo,
+    pub info: CartInfo,
     /// Absolute path to `cover.png` when present.
     pub cover: Option<String>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
-pub struct ProgramInfo {
+pub struct CartInfo {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
@@ -43,9 +43,9 @@ pub struct ProgramInfo {
 /// A running DOSBox process tracked by Retrium.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProgramProcess {
+pub struct CartProcess {
     pub pid: u32,
-    pub program: Program,
+    pub cart: Cart,
     pub dosbox_version: String,
     /// RFC 3339 timestamp of when the process was launched.
     pub started_at: String,
@@ -53,7 +53,7 @@ pub struct ProgramProcess {
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProgramSummary {
+pub struct CartSummary {
     /// ISO 8601 (RFC 3339) date string of the last run.
     pub last_run: String,
     pub runs: i64,
@@ -62,8 +62,8 @@ pub struct ProgramSummary {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct ProgramRunOptions {
-    pub program: Program,
+pub struct CartRunOptions {
+    pub cart: Cart,
     #[serde(rename = "dosboxVersion")]
     pub dosbox_version: String,
 }
@@ -78,7 +78,7 @@ pub struct DosboxVersions {
 /// A running DOSBox process tracked by Retrium.
 pub struct ProcessHandle {
     pub pid: u32,
-    pub program: Program,
+    pub cart: Cart,
     pub dosbox_version: String,
     pub started_at: chrono::DateTime<chrono::Utc>,
     /// Sending a value kills the spawned process and ends the watcher task.
@@ -115,19 +115,19 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::discover_programs,
-            commands::run_program,
-            commands::stop_program,
-            commands::stop_all_programs,
-            commands::list_program_processes,
-            commands::open_program_folder,
-            commands::delete_program,
-            commands::archive_program,
-            commands::add_programs,
-            commands::update_program_info,
-            commands::get_program_process,
-            commands::get_program_summary,
-            commands::get_program_summaries,
+            commands::discover_carts,
+            commands::run_cart,
+            commands::stop_cart,
+            commands::stop_all_carts,
+            commands::list_cart_processes,
+            commands::open_cart_folder,
+            commands::delete_cart,
+            commands::archive_cart,
+            commands::add_carts,
+            commands::update_cart_info,
+            commands::get_cart_process,
+            commands::get_cart_summary,
+            commands::get_cart_summaries,
             commands::get_dosbox_versions,
             commands::add_dosbox_version,
             commands::remove_dosbox_version,

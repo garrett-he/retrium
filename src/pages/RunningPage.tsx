@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CoverArt } from "@/components/CoverArt";
 import { MsIcon } from "@/components/MsIcon";
-import { useProgramsContext } from "@/hooks/usePrograms";
+import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
 import { formatUptime } from "@/lib/format";
 
@@ -15,7 +15,7 @@ import { formatUptime } from "@/lib/format";
 export function RunningPage() {
     const navigate = useNavigate();
     const { notify } = useSnackbar();
-    const { processes, stopProgram, stopAllPrograms } = useProgramsContext();
+    const { processes, stopCart, stopAllCarts } = useCartsContext();
     const [now, setNow] = useState(() => Date.now());
 
     useEffect(() => {
@@ -24,19 +24,19 @@ export function RunningPage() {
     }, []);
 
     const handleStop = (id: string, name: string) => {
-        const program = processes.find((process) => process.program.id === id)?.program;
-        if (!program) {
+        const cart = processes.find((process) => process.cart.id === id)?.cart;
+        if (!cart) {
             return;
         }
-        stopProgram(program)
+        stopCart(cart)
             .then(() => notify(`${name} stopped`, "info"))
             .catch((error) => notify(String(error), "error"));
     };
 
     const handleStopAll = () => {
-        stopAllPrograms()
+        stopAllCarts()
             .then((count) =>
-                notify(count > 0 ? `Stopped ${count} program${count > 1 ? "s" : ""}` : "Nothing to stop", "info"),
+                notify(count > 0 ? `Stopped ${count} cart${count > 1 ? "s" : ""}` : "Nothing to stop", "info"),
             )
             .catch((error) => notify(String(error), "error"));
     };
@@ -47,7 +47,7 @@ export function RunningPage() {
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary">
                         {processes.length > 0
-                            ? `${processes.length} program${processes.length > 1 ? "s" : ""} emulated in DOSBox`
+                            ? `${processes.length} cart${processes.length > 1 ? "s" : ""} emulated in DOSBox`
                             : "The CRT is warm, but nothing is running."}
                     </Typography>
                     {processes.length > 1 && (
@@ -64,7 +64,7 @@ export function RunningPage() {
                             Nothing is running
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Launch a program from the library to see it here.
+                            Launch a cart from the library to see it here.
                         </Typography>
                         <Button variant="contained" onClick={() => navigate("/")}>
                             Go to library
@@ -74,13 +74,13 @@ export function RunningPage() {
                     <Stack spacing={2}>
                         {processes.map((process) => (
                             <Paper
-                                key={process.program.id}
+                                key={process.cart.id}
                                 variant="outlined"
                                 sx={{ p: 2, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}
                             >
-                                <CoverArt program={process.program} height={56} glyphSize={28} radius="8px" />
+                                <CoverArt cart={process.cart} height={56} glyphSize={28} radius="8px" />
                                 <Box sx={{ minWidth: 180, flexGrow: 1 }}>
-                                    <Typography sx={{ fontWeight: 600 }}>{process.program.info.name}</Typography>
+                                    <Typography sx={{ fontWeight: 600 }}>{process.cart.info.name}</Typography>
                                     <Typography
                                         variant="caption"
                                         color="text.secondary"
@@ -102,7 +102,7 @@ export function RunningPage() {
                                     color="error"
                                     size="small"
                                     startIcon={<MsIcon>stop</MsIcon>}
-                                    onClick={() => handleStop(process.program.id, process.program.info.name)}
+                                    onClick={() => handleStop(process.cart.id, process.cart.info.name)}
                                 >
                                     Stop
                                 </Button>

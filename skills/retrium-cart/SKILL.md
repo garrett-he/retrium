@@ -1,6 +1,6 @@
 ---
 name: retrium-cart
-description: Build, validate, and repair carts (program packages) for Retrium, a DOSBox library app, including .retrium/metadata.json, .retrium/cover.png, .retrium/dosbox.conf, and the .cart archive layout used by import. Use when asked to build a cart for a DOS game or program, fix metadata or launch problems, or review an existing cart for compatibility.
+description: Build, validate, and repair carts (cart packages) for Retrium, a DOSBox library app, including .retrium/metadata.json, .retrium/cover.png, .retrium/dosbox.conf, and the .cart archive layout used by import. Use when asked to build a cart for a DOS game or cart, fix metadata or launch problems, or review an existing cart for compatibility.
 agent_created: true
 ---
 
@@ -11,7 +11,7 @@ agent_created: true
 A Retrium **cart** is a self-contained unit for a DOS program: the program files at the root plus a hidden
 `.retrium/` control folder holding metadata, optional cover art, and an optional DOSBox configuration. When
 exported, a cart is a zip-format archive with a `.cart` extension. Retrium reads this layout directly from
-disk (`discover_programs`, `load_program_info`, `run_program`, `import_archive` in
+disk (`discover_carts`, `load_cart_info`, `run_cart`, `import_archive` in
 `src-tauri/src/commands.rs`), so an AI-built cart must match that contract exactly.
 
 ## When to use this skill
@@ -23,9 +23,9 @@ disk (`discover_programs`, `load_program_info`, `run_program`, `import_archive` 
 ## Cart layout
 
 ```text
-<program-id>/
-├── PROGRAM.EXE          # executable and all game data at the root
-├── *.BAT / *.COM / ...  # anything the program needs at runtime
+<cart-id>/
+├── CART.EXE          # executable and all game data at the root
+├── *.BAT / *.COM / ...  # anything the cart needs at runtime
 └── .retrium/
     ├── metadata.json    # canonical metadata; write this file
     ├── dosbox.conf      # optional; passed to DOSBox with -conf
@@ -34,10 +34,10 @@ disk (`discover_programs`, `load_program_info`, `run_program`, `import_archive` 
 
 Hard rules derived from the backend:
 
-- The **program id** is the directory basename under `<library>/programs/<id>/`. It is also used for
+- The **cart id** is the directory basename under `<library>/carts/<id>/`. It is also used for
   `<library>/states/<id>/` and `<library>/summaries/<id>.json`. Keep it unique, stable, and free of path
-  separators or reserved characters; prefer the program's short ASCII title.
-- Retrium launches DOSBox with the **program directory as the working directory** and a config that
+  separators or reserved characters; prefer the cart's short ASCII title.
+- Retrium launches DOSBox with the **cart directory as the working directory** and a config that
   normally mounts it as `C:` (`MOUNT C .`). Keep executable paths relative to that root.
 - Files created or modified during play **outside `.retrium/`** are mirrored to `<library>/states/<id>/`
   and restored before the next launch. Never store metadata, configs, or cover art outside `.retrium/`,
@@ -48,9 +48,9 @@ Hard rules derived from the backend:
 
 ## Workflow
 
-### Step 1 — Stage the program
+### Step 1 — Stage the cart
 
-Build in a staging directory, not in a user's live library. Choose the program id, copy the original program
+Build in a staging directory, not in a user's live library. Choose the cart id, copy the original cart
 files into `<id>/` preserving filenames and case, and confirm the executable named in the autoexec exists.
 On Linux and macOS, DOSBox command lines and filenames are case-sensitive.
 
@@ -73,8 +73,8 @@ deserialization behavior.
 
 ### Step 3 — Write `.retrium/dosbox.conf`
 
-Copy `assets/cart-template/.retrium/dosbox.conf`. The `[autoexec]` section must mount the program
-directory and launch the program, for example:
+Copy `assets/cart-template/.retrium/dosbox.conf`. The `[autoexec]` section must mount the cart
+directory and launch the cart, for example:
 
 ```ini
 [autoexec]
@@ -109,10 +109,10 @@ Fix every reported error; warnings need a deliberate decision.
 
 ### Step 6 — Export and hand off
 
-Create a `.cart` archive (zip format) whose **single top-level entry is the program-id folder**. Retrium uses
+Create a `.cart` archive (zip format) whose **single top-level entry is the cart-id folder**. Retrium uses
 that folder name as the id; if the cart has multiple root entries, the archive file name (minus extension)
 becomes the id instead. Agents should hand the finished cart to the user for import through the app's
-**Add Programs** action rather than writing directly into `<library>/`.
+**Add Carts** action rather than writing directly into `<library>/`.
 
 ## Common pitfalls
 
@@ -120,8 +120,8 @@ becomes the id instead. Agents should hand the finished cart to the user for imp
 | --- | --- |
 | Display name is the folder name | `metadata.json` missing, invalid JSON, or `name` empty. |
 | No cover art | File not named exactly `cover.png`, not in `.retrium/`, or not a PNG. |
-| DOSBox prompt instead of the game | Wrong/missing autoexec launch line, wrong executable case, or mount target not the program root. |
-| Saved game appears to vanish | `.retrium/` is excluded from state mirroring, or the game saves outside the program directory. |
+| DOSBox prompt instead of the game | Wrong/missing autoexec launch line, wrong executable case, or mount target not the cart root. |
+| Saved game appears to vanish | `.retrium/` is excluded from state mirroring, or the game saves outside the cart directory. |
 | Imported id is unexpected | Cart had no single top-level folder, so the archive stem was used. |
 
 ## Resources

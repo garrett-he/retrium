@@ -110,7 +110,7 @@ const theme = createTheme({
 
 const DOSBOX_VERSIONS = ["0.74-3", "DOSBox-X 2024.12", "Staging 0.81"];
 
-const PROGRAMS = [
+const CARTS = [
   { id: "doom", name: "DOOM", year: 1993, category: "Action", language: "English",
     developer: "id Software", publisher: "GT Interactive", series: "DOOM",
     tags: ["FPS", "Shareware", "Moddable"], seconds: 55320, runs: 87,
@@ -180,14 +180,14 @@ const MsIcon = ({ children, sx, filled, ...rest }) => (
 
 /* --------------------------------- cover art ------------------------------- */
 
-function CoverArt({ program, height, glyphSize = 64, radius = 0 }) {
+function CoverArt({ cart, height, glyphSize = 64, radius = 0 }) {
   return (
     <Box className="scanlines" sx={{
       position: "relative", height, borderRadius: radius, overflow: "hidden",
-      background: `linear-gradient(155deg, ${program.from} 0%, ${program.to} 100%)`,
+      background: `linear-gradient(155deg, ${cart.from} 0%, ${cart.to} 100%)`,
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
-      <MsIcon filled sx={{ fontSize: glyphSize, color: "rgba(255,242,214,0.42)" }}>{program.glyph}</MsIcon>
+      <MsIcon filled sx={{ fontSize: glyphSize, color: "rgba(255,242,214,0.42)" }}>{cart.glyph}</MsIcon>
     </Box>
   );
 }
@@ -252,7 +252,7 @@ function SetupScreen({ onFinish, notify }) {
           <MsIcon filled sx={{ fontSize: 44, color: "primary.main" }}>terminal</MsIcon>
           <Typography variant="h4" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>Welcome to Retrium</Typography>
           <Typography color="text.secondary" align="center">
-            Two quick settings and your shelf of old programs is ready.
+            Two quick settings and your shelf of old carts is ready.
           </Typography>
         </Stack>
 
@@ -265,9 +265,9 @@ function SetupScreen({ onFinish, notify }) {
 
           {step === 0 && (
             <Stack spacing={2} className="fade-up">
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Where should Retrium keep your programs?</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Where should Retrium keep your carts?</Typography>
               <Typography variant="body2" color="text.secondary">
-                Each program gets its own sub-folder here, together with saved states and metadata.
+                Each cart gets its own sub-folder here, together with saved states and metadata.
               </Typography>
               <TextField
                 label="Library directory" fullWidth variant="outlined" size="small"
@@ -292,7 +292,7 @@ function SetupScreen({ onFinish, notify }) {
 
           {step === 1 && (
             <Stack spacing={2} className="fade-up">
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Which DOSBox should launch your programs?</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Which DOSBox should launch your carts?</Typography>
               <Typography variant="body2" color="text.secondary">
                 Point to DOSBox.exe (or the binary on macOS/Linux). You can add more versions later in Settings.
               </Typography>
@@ -326,9 +326,9 @@ function SetupScreen({ onFinish, notify }) {
   );
 }
 
-/* ------------------------------ program card ------------------------------ */
+/* ------------------------------ cart card ------------------------------ */
 
-function ProgramCard({ program, onOpen, onStop }) {
+function CartCard({ cart, onOpen, onStop }) {
   return (
     <Card sx={{
       "&:hover": { transform: "translateY(-4px)", boxShadow: "0 14px 30px -12px rgba(0,0,0,.6)" },
@@ -336,8 +336,8 @@ function ProgramCard({ program, onOpen, onStop }) {
     }}>
       <CardActionArea onClick={onOpen} sx={{ height: "100%" }}>
         <Box sx={{ position: "relative" }}>
-          <CoverArt program={program} height={132} glyphSize={54} />
-          {program.running && (
+          <CoverArt cart={cart} height={132} glyphSize={54} />
+          {cart.running && (
             <Chip
               size="small" icon={<span className="pulse-dot" />}
               label="Running"
@@ -352,31 +352,31 @@ function ProgramCard({ program, onOpen, onStop }) {
         </Box>
         <Box sx={{ p: 1.5 }}>
           <Typography sx={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {program.name}
+            {cart.name}
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{
             fontFamily: '"IBM Plex Mono", monospace',
           }}>
-            {program.year} · {program.category}
+            {cart.year} · {cart.category}
           </Typography>
           <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1 }}>
             <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
               <MsIcon sx={{ fontSize: 15 }}>schedule</MsIcon>
               <Typography variant="caption" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
-                {fmtTime(program.seconds)}
+                {fmtTime(cart.seconds)}
               </Typography>
             </Stack>
             <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
               <MsIcon sx={{ fontSize: 15 }}>replay</MsIcon>
               <Typography variant="caption" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
-                {program.runs}×
+                {cart.runs}×
               </Typography>
             </Stack>
           </Stack>
         </Box>
       </CardActionArea>
-      {program.running && (
-        <Tooltip title="Stop program">
+      {cart.running && (
+        <Tooltip title="Stop cart">
           <IconButton
             size="small" aria-label="Stop"
             onClick={(e) => { e.stopPropagation(); onStop(); }}
@@ -392,14 +392,14 @@ function ProgramCard({ program, onOpen, onStop }) {
 
 /* --------------------------------- library -------------------------------- */
 
-function LibraryScreen({ programs, onOpen, onRun, onStop, notify }) {
+function LibraryScreen({ carts, onOpen, onRun, onStop, notify }) {
   const [query, setQuery] = React.useState("");
   const [category, setCategory] = React.useState("All");
   const [sort, setSort] = React.useState("recent");
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    let list = programs.filter((p) => {
+    let list = carts.filter((p) => {
       const inCategory = category === "All" || p.category === category;
       const inQuery = !q || [p.name, p.developer, ...(p.tags || [])].join(" ").toLowerCase().includes(q);
       return inCategory && inQuery;
@@ -410,16 +410,16 @@ function LibraryScreen({ programs, onOpen, onRun, onStop, notify }) {
       return b.lastRun.localeCompare(a.lastRun);
     });
     return list;
-  }, [programs, query, category, sort]);
+  }, [carts, query, category, sort]);
 
-  const totalSeconds = programs.reduce((acc, p) => acc + p.seconds, 0);
-  const runningCount = programs.filter((p) => p.running).length;
+  const totalSeconds = carts.reduce((acc, p) => acc + p.seconds, 0);
+  const runningCount = carts.filter((p) => p.running).length;
 
   const stats = [
-    { icon: "apps", label: "Programs", value: String(programs.length) },
+    { icon: "apps", label: "Carts", value: String(carts.length) },
     { icon: "schedule", label: "Total playtime", value: fmtTime(totalSeconds) },
     { icon: "play_circle", label: "Running now", value: String(runningCount) },
-    { icon: "category", label: "Categories", value: String(new Set(programs.map((p) => p.category)).size) },
+    { icon: "category", label: "Categories", value: String(new Set(carts.map((p) => p.category)).size) },
   ];
 
   return (
@@ -477,8 +477,8 @@ function LibraryScreen({ programs, onOpen, onRun, onStop, notify }) {
         <Stack direction="row" spacing={1} sx={{ mb: 3, flexWrap: "wrap", rowGap: 1 }}>
           {CATEGORIES.map((cat) => {
             const count = cat === "All"
-              ? programs.length
-              : programs.filter((p) => p.category === cat).length;
+              ? carts.length
+              : carts.filter((p) => p.category === cat).length;
             if (count === 0) return null;
             return (
               <Chip
@@ -499,7 +499,7 @@ function LibraryScreen({ programs, onOpen, onRun, onStop, notify }) {
             gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)", lg: "repeat(4, 1fr)" },
           }}>
             {filtered.map((p) => (
-              <ProgramCard key={p.id} program={p} onOpen={() => onOpen(p)} onStop={() => { onStop(p); notify(`${p.name} stopped`, "info"); }} />
+              <CartCard key={p.id} cart={p} onOpen={() => onOpen(p)} onStop={() => { onStop(p); notify(`${p.name} stopped`, "info"); }} />
             ))}
           </Box>
         ) : (
@@ -507,7 +507,7 @@ function LibraryScreen({ programs, onOpen, onRun, onStop, notify }) {
             <MsIcon sx={{ fontSize: 44, color: "text.secondary" }}>search_off</MsIcon>
             <Typography variant="h6" sx={{ mt: 1 }}>Nothing on this shelf</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              No program matches your filters.
+              No cart matches your filters.
             </Typography>
             <Button onClick={() => { setQuery(""); setCategory("All"); }}>Clear filters</Button>
           </Paper>
@@ -515,10 +515,10 @@ function LibraryScreen({ programs, onOpen, onRun, onStop, notify }) {
       </Container>
       </Box>
 
-      <Tooltip title="Add programs from library folder">
+      <Tooltip title="Add carts from library folder">
         <Fab
-          color="primary" aria-label="Add programs"
-          onClick={() => notify("Scan finished — 2 new programs added", "success")}
+          color="primary" aria-label="Add carts"
+          onClick={() => notify("Scan finished — 2 new carts added", "success")}
           sx={{ position: "fixed", right: 24, bottom: 24 }}
         >
           <MsIcon>add</MsIcon>
@@ -530,22 +530,22 @@ function LibraryScreen({ programs, onOpen, onRun, onStop, notify }) {
 
 /* ------------------------------ detail screen ------------------------------ */
 
-function DetailScreen({ program, onHome, onRun, onStop, onNotify }) {
+function DetailScreen({ cart, onHome, onRun, onStop, onNotify }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   const infoRows = [
-    ["Category", program.category], ["Release", program.year], ["Language", program.language],
+    ["Category", cart.category], ["Release", cart.year], ["Language", cart.language],
   ];
   const extraRows = [
-    ["Developer", program.developer], ["Publisher", program.publisher],
-    ["Series", program.series], ["Directory", program.dir],
+    ["Developer", cart.developer], ["Publisher", cart.publisher],
+    ["Series", cart.series], ["Directory", cart.dir],
   ];
 
   const statCards = [
-    { icon: "event", label: "Last run", value: program.lastRun || "—" },
-    { icon: "schedule", label: "Total playtime", value: fmtTime(program.seconds) },
-    { icon: "replay", label: "Times played", value: `${program.runs}×` },
+    { icon: "event", label: "Last run", value: cart.lastRun || "—" },
+    { icon: "schedule", label: "Total playtime", value: fmtTime(cart.seconds) },
+    { icon: "replay", label: "Times played", value: `${cart.runs}×` },
   ];
 
   return (
@@ -553,20 +553,20 @@ function DetailScreen({ program, onHome, onRun, onStop, onNotify }) {
       <Container maxWidth="lg" sx={{ py: 3 }}>
         {/* hero */}
         <Box sx={{ position: "relative", mb: 3 }}>
-          <CoverArt program={program} height={230} glyphSize={96} radius="16px" />
+          <CoverArt cart={cart} height={230} glyphSize={96} radius="16px" />
           <Box sx={{
             position: "absolute", inset: 0, borderRadius: "16px",
             background: "linear-gradient(180deg, transparent 40%, rgba(20,17,14,0.9) 100%)",
             display: "flex", flexDirection: "column", justifyContent: "flex-end", p: 2.5,
           }}>
-            <Typography variant="h4">{program.name}</Typography>
+            <Typography variant="h4">{cart.name}</Typography>
             <Typography variant="body2" sx={{
               color: "rgba(236,229,218,0.85)", fontFamily: '"IBM Plex Mono", monospace',
             }}>
-              {program.year} · {program.category} · {program.developer}
+              {cart.year} · {cart.category} · {cart.developer}
             </Typography>
           </Box>
-          {program.running && (
+          {cart.running && (
             <Chip
               icon={<span className="pulse-dot" />} label="Running"
               sx={{ position: "absolute", top: 14, right: 14, bgcolor: "rgba(23,20,18,0.9)", color: "#8FE093", fontFamily: '"IBM Plex Mono", monospace' }}
@@ -576,25 +576,25 @@ function DetailScreen({ program, onHome, onRun, onStop, onNotify }) {
 
         {/* actions */}
         <Stack direction="row" spacing={1.5} sx={{ flexWrap: "wrap", rowGap: 1.5, mb: 4 }} useFlexGap>
-          {program.running ? (
+          {cart.running ? (
             <Button variant="contained" color="error" startIcon={<MsIcon>stop</MsIcon>}
-              onClick={() => { onStop(program); onNotify(`${program.name} stopped`, "info"); }}>
+              onClick={() => { onStop(cart); onNotify(`${cart.name} stopped`, "info"); }}>
               Stop
             </Button>
           ) : (
             <React.Fragment>
               <ButtonGroupish
                 versions={DOSBOX_VERSIONS} anchorEl={anchorEl} setAnchorEl={setAnchorEl}
-                onRun={(v) => { onRun(program, v); onNotify(`Launched ${program.name} in DOSBox ${v}`, "success"); }}
+                onRun={(v) => { onRun(cart, v); onNotify(`Launched ${cart.name} in DOSBox ${v}`, "success"); }}
               />
             </React.Fragment>
           )}
           <Button variant="outlined" startIcon={<MsIcon>folder_open</MsIcon>}
-            onClick={() => onNotify(`Opened ${program.dir}`, "info")}>
+            onClick={() => onNotify(`Opened ${cart.dir}`, "info")}>
             Browse
           </Button>
           <Button variant="outlined" startIcon={<MsIcon>archive</MsIcon>}
-            onClick={() => onNotify(`Archiving ${program.name}…`, "info")}>
+            onClick={() => onNotify(`Archiving ${cart.name}…`, "info")}>
             Export
           </Button>
           <Button variant="outlined" color="error" startIcon={<MsIcon>delete</MsIcon>}
@@ -640,7 +640,7 @@ function DetailScreen({ program, onHome, onRun, onStop, onNotify }) {
 
         {/* tags */}
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
-          {(program.tags || []).map((t) => (
+          {(cart.tags || []).map((t) => (
             <Chip key={t} label={t} size="small" variant="outlined"
               sx={{ borderColor: "rgba(255,179,0,0.45)", color: "#FFD54F", fontFamily: '"IBM Plex Mono", monospace' }} />
           ))}
@@ -649,10 +649,10 @@ function DetailScreen({ program, onHome, onRun, onStop, onNotify }) {
 
       {/* delete confirmation */}
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-        <DialogTitle>Delete “{program.name}”?</DialogTitle>
+        <DialogTitle>Delete “{cart.name}”?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            The folder <strong>{program.dir}</strong> and its saved states will be removed permanently.
+            The folder <strong>{cart.dir}</strong> and its saved states will be removed permanently.
             This action cannot be undone.
           </DialogContentText>
         </DialogContent>
@@ -660,7 +660,7 @@ function DetailScreen({ program, onHome, onRun, onStop, onNotify }) {
           <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
           <Button color="error" variant="contained" onClick={() => {
             setConfirmOpen(false);
-            onNotify(`${program.name} deleted`, "error");
+            onNotify(`${cart.name} deleted`, "error");
             onHome();
           }}>
             Delete permanently
@@ -756,18 +756,18 @@ function ScreenSwitcher({ screen, setScreen }) {
 
 function App() {
   const [screen, setScreen] = React.useState("library");
-  const [programs, setPrograms] = React.useState(PROGRAMS);
+  const [carts, setCarts] = React.useState(CARTS);
   const [currentId, setCurrentId] = React.useState("doom");
   const [snack, setSnack] = React.useState(null);
 
   const notify = (message, severity = "info") => setSnack({ message, severity, key: Date.now() });
-  const current = programs.find((p) => p.id === currentId);
+  const current = carts.find((p) => p.id === currentId);
 
-  const openProgram = (p) => { setCurrentId(p.id); setScreen("detail"); };
-  const runProgram = (p, version) =>
-    setPrograms((list) => list.map((x) => (x.id === p.id ? { ...x, running: true } : x)));
-  const stopProgram = (p) =>
-    setPrograms((list) => list.map((x) => (x.id === p.id ? { ...x, running: false } : x)));
+  const openCart = (p) => { setCurrentId(p.id); setScreen("detail"); };
+  const runCart = (p, version) =>
+    setCarts((list) => list.map((x) => (x.id === p.id ? { ...x, running: true } : x)));
+  const stopCart = (p) =>
+    setCarts((list) => list.map((x) => (x.id === p.id ? { ...x, running: false } : x)));
 
   const goHome = () => setScreen("library");
 
@@ -781,12 +781,12 @@ function App() {
         )}
         {screen === "library" && (
           <LibraryScreen
-            programs={programs} onOpen={openProgram} onRun={runProgram} onStop={stopProgram} notify={notify}
+            carts={carts} onOpen={openCart} onRun={runCart} onStop={stopCart} notify={notify}
           />
         )}
         {screen === "detail" && current && (
           <DetailScreen
-            program={current} onHome={goHome} onRun={runProgram} onStop={stopProgram} onNotify={notify}
+            cart={current} onHome={goHome} onRun={runCart} onStop={stopCart} onNotify={notify}
           />
         )}
       </Box>

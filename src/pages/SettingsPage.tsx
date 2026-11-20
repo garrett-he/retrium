@@ -15,7 +15,7 @@ import Typography from "@mui/material/Typography";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { type ReactNode, useState } from "react";
 import { MsIcon } from "@/components/MsIcon";
-import { useProgramsContext } from "@/hooks/usePrograms";
+import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
 import { api } from "@/lib/api";
 import type { ThemeMode } from "@/theme";
@@ -61,7 +61,7 @@ function InfoRow({ label, value, mono = false, action }: InfoRowProps) {
 export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeChange: (mode: ThemeMode) => void }) {
     const { notify } = useSnackbar();
     const { dosboxVersions, setupState, addDosboxVersion, removeDosboxVersion, setDefaultDosboxVersion } =
-        useProgramsContext();
+        useCartsContext();
 
     const [addOpen, setAddOpen] = useState(false);
     const [newName, setNewName] = useState("");
@@ -110,7 +110,7 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                         <Typography variant="h6">Storage</Typography>
                     </Stack>
                     <InfoRow label="Library" value={setupState?.library ?? "—"} mono />
-                    <InfoRow label="Programs" value="stored in per-program sub-folders with saved states" />
+                    <InfoRow label="Carts" value="stored in per-cart sub-folders with saved states" />
                     <Button size="small" variant="outlined" sx={{ mt: 1.5 }} onClick={handleChangeDirectory}>
                         Change directory
                     </Button>

@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ProgramsProvider } from "@/hooks/usePrograms";
+import { CartsProvider } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
 import { SettingsPage } from "./SettingsPage";
 
@@ -18,7 +18,7 @@ function mockResponse(cmd: string) {
     if (cmd === "get_setup_state") {
         return { configured: true, library: "C:\\Games", dosbox: "C:\\DOSBox\\dosbox.exe" };
     }
-    if (cmd === "discover_programs") {
+    if (cmd === "discover_carts") {
         return [];
     }
     if (cmd === "get_dosbox_versions") {
@@ -30,7 +30,7 @@ function mockResponse(cmd: string) {
             ],
         };
     }
-    if (cmd === "get_program_summaries" || cmd === "list_program_processes") {
+    if (cmd === "get_cart_summaries" || cmd === "list_cart_processes") {
         return {};
     }
     if (cmd === "pick_dosbox_executable") {
@@ -47,9 +47,9 @@ function renderPage(mode: "dark" | "light" = "dark", onModeChange = vi.fn()) {
     return render(
         <MemoryRouter>
             <SnackbarProvider>
-                <ProgramsProvider>
+                <CartsProvider>
                     <SettingsPage mode={mode} onModeChange={onModeChange} />
-                </ProgramsProvider>
+                </CartsProvider>
             </SnackbarProvider>
         </MemoryRouter>,
     );

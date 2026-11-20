@@ -58,7 +58,7 @@ export function Sidebar({ runningCount, mode, onModeChange }: SidebarProps) {
             </Box>
             <List sx={{ px: 1.5, flexGrow: 1 }}>
                 {items.map((item) => {
-                    const selected = pathname === item.key || (item.key === "/" && pathname.startsWith("/programs"));
+                    const selected = pathname === item.key || (item.key === "/" && pathname.startsWith("/carts"));
                     return (
                         <ListItemButton
                             key={item.key}

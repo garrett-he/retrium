@@ -5,19 +5,19 @@ Guidance for AI coding agents working on Retrium.
 ## Project
 
 Retrium is a cross-platform desktop app for organising and launching old
-programs with DOSBox. It is built with Tauri 2: a Rust backend in `src-tauri/`
+carts with DOSBox. It is built with Tauri 2: a Rust backend in `src-tauri/`
 and a React 19 + TypeScript + MUI frontend in `src/`.
 
 ## Layout
 
-- `src/pages/` — Library, Program, Running, Settings and Setup pages.
+- `src/pages/` — Library, Cart, Running, Settings and Setup pages.
 - `src/components/` — app shell, sidebar, cards, menus, icons.
-- `src/hooks/usePrograms.tsx` — shared program/process/version state.
+- `src/hooks/useCarts.tsx` — shared cart/process/version state.
 - `src/lib/api.ts` — typed wrappers around every Tauri command.
 - `src/types/` — frontend types mirroring Rust structs.
 - `src-tauri/src/lib.rs` — app state, shared types and the invoke handler.
 - `src-tauri/src/commands.rs` — all Tauri commands, archive import/export,
-  state watcher and program discovery.
+  state watcher and cart discovery.
 - `src-tauri/src/config.rs` — config file loading/saving and migrations.
 
 ## Commands
@@ -50,15 +50,15 @@ Run `pnpm typecheck`, `pnpm lint`, `pnpm test` for frontend changes and
 
 ## Data model
 
-- Programs live at `<library>/programs/<id>/`.
-- Metadata is `<program>/.retrium/metadata.json`; the legacy `info.json` is read
+- Carts live at `<library>/carts/<id>/`.
+- Metadata is `<cart>/.retrium/metadata.json`; the legacy `info.json` is read
   as a fallback but must never be written. Optional `cover.png` and
   `dosbox.conf` live beside it.
 - Saved states are mirrored to `<library>/states/<id>/` and restored before a run.
 - Play summaries are stored at `<library>/summaries/<id>.json`.
-- A program folder is called a cart; exporting writes `<id>.cart` (zip format),
+- A cart folder is called a cart; exporting writes `<id>.cart` (zip format),
   and legacy `.zip`, `.tar.gz` and `.tgz` archives can also be imported.
-- Importing a cart with a single top-level folder uses that folder as the program
+- Importing a cart with a single top-level folder uses that folder as the cart
   directory; otherwise the archive file name is used.
 - Never modify a user's library data outside the app's own commands.
 

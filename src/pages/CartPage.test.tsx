@@ -2,16 +2,16 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ProgramsProvider } from "@/hooks/usePrograms";
+import { CartsProvider } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
 import { formatDateTime } from "@/lib/format";
-import { ProgramPage } from "./ProgramPage";
+import { CartPage } from "./CartPage";
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 
 vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: vi.fn((p: string) => p), invoke }));
 
-const program = {
+const cart = {
     id: "doom",
     dir: "/games/doom",
     info: {
@@ -30,8 +30,8 @@ function mockResponse(cmd: string) {
     if (cmd === "get_setup_state") {
         return { configured: true, library: "/games", dosbox: "/usr/bin/dosbox" };
     }
-    if (cmd === "discover_programs") {
-        return [program];
+    if (cmd === "discover_carts") {
+        return [cart];
     }
     if (cmd === "get_dosbox_versions") {
         return {
@@ -42,14 +42,14 @@ function mockResponse(cmd: string) {
             ],
         };
     }
-    if (cmd === "get_program_summaries") {
+    if (cmd === "get_cart_summaries") {
         return { doom: { lastRun: "2026-01-02T00:00:00Z", runs: 3, elapsed: 5400 } };
     }
-    if (cmd === "list_program_processes") {
+    if (cmd === "list_cart_processes") {
         return [];
     }
-    if (cmd === "update_program_info") {
-        return { ...program, info: { ...program.info, name: "Doom Reloaded" } };
+    if (cmd === "update_cart_info") {
+        return { ...cart, info: { ...cart.info, name: "Doom Reloaded" } };
     }
     return [];
 }
@@ -60,20 +60,20 @@ function mockBackend() {
 
 function renderPage() {
     return render(
-        <MemoryRouter initialEntries={["/programs/doom"]}>
+        <MemoryRouter initialEntries={["/carts/doom"]}>
             <SnackbarProvider>
-                <ProgramsProvider>
+                <CartsProvider>
                     <Routes>
-                        <Route path="/programs/:id" element={<ProgramPage />} />
+                        <Route path="/carts/:id" element={<CartPage />} />
                         <Route path="/" element={<div>library home</div>} />
                     </Routes>
-                </ProgramsProvider>
+                </CartsProvider>
             </SnackbarProvider>
         </MemoryRouter>,
     );
 }
 
-describe("ProgramPage", () => {
+describe("CartPage", () => {
     beforeEach(() => {
         mockBackend();
     });
@@ -97,7 +97,7 @@ describe("ProgramPage", () => {
         await user.click(screen.getByTestId("run-default"));
 
         expect(invoke).toHaveBeenCalledWith(
-            "run_program",
+            "run_cart",
             expect.objectContaining({ options: expect.objectContaining({ dosboxVersion: "DOSBox" }) }),
         );
         expect(await screen.findByText("Launched Doom in DOSBox DOSBox")).toBeTruthy();
@@ -112,7 +112,7 @@ describe("ProgramPage", () => {
         await user.click(screen.getByText("Staging"));
 
         expect(invoke).toHaveBeenCalledWith(
-            "run_program",
+            "run_cart",
             expect.objectContaining({ options: expect.objectContaining({ dosboxVersion: "Staging" }) }),
         );
     });
@@ -129,14 +129,14 @@ describe("ProgramPage", () => {
         await user.click(screen.getByRole("button", { name: "Save changes" }));
 
         expect(invoke).toHaveBeenCalledWith(
-            "update_program_info",
+            "update_cart_info",
             expect.objectContaining({ info: expect.objectContaining({ name: "Doom Reloaded" }) }),
         );
         expect(await screen.findByText("Metadata saved")).toBeTruthy();
         expect(await screen.findByRole("heading", { name: "Doom Reloaded" })).toBeTruthy();
     });
 
-    it("deletes the program after confirmation and navigates home", async () => {
+    it("deletes the cart after confirmation and navigates home", async () => {
         const user = userEvent.setup();
         renderPage();
         await screen.findByRole("heading", { name: "Doom" });
@@ -144,17 +144,17 @@ describe("ProgramPage", () => {
         await user.click(screen.getByRole("button", { name: "Delete" }));
         await user.click(screen.getByRole("button", { name: "Delete permanently" }));
 
-        expect(invoke).toHaveBeenCalledWith("delete_program", { program });
+        expect(invoke).toHaveBeenCalledWith("delete_cart", { cart });
         expect(await screen.findByText("library home")).toBeTruthy();
     });
 
-    it("stops a running program and opens the folder", async () => {
+    it("stops a running cart and opens the folder", async () => {
         invoke.mockImplementation(async (cmd: string) => {
-            if (cmd === "list_program_processes") {
+            if (cmd === "list_cart_processes") {
                 return [
                     {
                         pid: 7,
-                        program,
+                        cart,
                         dosboxVersion: "DOSBox",
                         startedAt: new Date().toISOString(),
                     },
@@ -168,7 +168,7 @@ describe("ProgramPage", () => {
         expect(await screen.findByText("Running")).toBeTruthy();
 
         await user.click(screen.getByRole("button", { name: "Stop" }));
-        expect(invoke).toHaveBeenCalledWith("stop_program", { program });
+        expect(invoke).toHaveBeenCalledWith("stop_cart", { cart });
         expect(await screen.findByText("Doom stopped")).toBeTruthy();
     });
 
@@ -178,17 +178,17 @@ describe("ProgramPage", () => {
         await screen.findByRole("heading", { name: "Doom" });
 
         await user.click(screen.getByRole("button", { name: "Export" }));
-        expect(invoke).toHaveBeenCalledWith("archive_program", { program });
+        expect(invoke).toHaveBeenCalledWith("archive_cart", { cart });
         expect(await screen.findByText("Exported Doom.cart")).toBeTruthy();
     });
 
-    it("opens the program folder from the action row", async () => {
+    it("opens the cart folder from the action row", async () => {
         const user = userEvent.setup();
         renderPage();
         await screen.findByRole("heading", { name: "Doom" });
 
         await user.click(screen.getByRole("button", { name: "Browse" }));
-        expect(invoke).toHaveBeenCalledWith("open_program_folder", { program });
+        expect(invoke).toHaveBeenCalledWith("open_cart_folder", { cart });
         expect(await screen.findByText("Opened /games/doom")).toBeTruthy();
     });
 
@@ -218,7 +218,7 @@ describe("ProgramPage", () => {
         await user.click(screen.getByRole("button", { name: "Save changes" }));
 
         expect(invoke).toHaveBeenCalledWith(
-            "update_program_info",
+            "update_cart_info",
             expect.objectContaining({
                 info: expect.objectContaining({
                     developer: "id Software 1993",
@@ -230,18 +230,18 @@ describe("ProgramPage", () => {
         );
     });
 
-    it("shows a fallback when the program is unknown", async () => {
+    it("shows a fallback when the cart is unknown", async () => {
         render(
-            <MemoryRouter initialEntries={["/programs/unknown"]}>
+            <MemoryRouter initialEntries={["/carts/unknown"]}>
                 <SnackbarProvider>
-                    <ProgramsProvider>
+                    <CartsProvider>
                         <Routes>
-                            <Route path="/programs/:id" element={<ProgramPage />} />
+                            <Route path="/carts/:id" element={<CartPage />} />
                         </Routes>
-                    </ProgramsProvider>
+                    </CartsProvider>
                 </SnackbarProvider>
             </MemoryRouter>,
         );
-        expect(await screen.findByText("Program not found")).toBeTruthy();
+        expect(await screen.findByText("Cart not found")).toBeTruthy();
     });
 });

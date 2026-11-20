@@ -20,38 +20,36 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMemo, useState } from "react";
+import { CartCard } from "@/components/CartCard";
+import type { CartMenuActions } from "@/components/CartMenu";
+import { CartRow } from "@/components/CartRow";
 import { MsIcon } from "@/components/MsIcon";
-import { ProgramCard } from "@/components/ProgramCard";
-import type { ProgramMenuActions } from "@/components/ProgramMenu";
-import { ProgramRow } from "@/components/ProgramRow";
-import { useProgramsContext } from "@/hooks/usePrograms";
+import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
 import { api } from "@/lib/api";
-import type { Program } from "@/types";
+import type { Cart } from "@/types";
 
 type SortKey = "recent" | "name" | "year";
 
 /** Library home: stats overview, search, filters, grid/list views and quick actions. */
 export function LibraryPage() {
     const { notify } = useSnackbar();
-    const { programs, processes, summaries, runProgram, stopProgram, addPrograms, refresh } = useProgramsContext();
+    const { carts, processes, summaries, runCart, stopCart, addCarts, refresh } = useCartsContext();
 
     const [query, setQuery] = useState("");
     const [category, setCategory] = useState("All");
     const [sort, setSort] = useState<SortKey>("recent");
     const [view, setView] = useState<"grid" | "list">("grid");
     const [adding, setAdding] = useState(false);
-    const [deleting, setDeleting] = useState<Program | null>(null);
+    const [deleting, setDeleting] = useState<Cart | null>(null);
 
-    const runningIds = useMemo(() => new Set(processes.map((process) => process.program.id)), [processes]);
+    const runningIds = useMemo(() => new Set(processes.map((process) => process.cart.id)), [processes]);
 
     const filtered = useMemo(() => {
         const needle = query.trim().toLowerCase();
-        const list = programs.filter((program) => {
-            const inCategory = category === "All" || (program.info.category ?? "Uncategorized") === category;
-            const haystack = [program.info.name, program.info.developer, ...(program.info.tags ?? [])]
-                .join(" ")
-                .toLowerCase();
+        const list = carts.filter((cart) => {
+            const inCategory = category === "All" || (cart.info.category ?? "Uncategorized") === category;
+            const haystack = [cart.info.name, cart.info.developer, ...(cart.info.tags ?? [])].join(" ").toLowerCase();
             return inCategory && (needle.length === 0 || haystack.includes(needle));
         });
         return [...list].sort((a, b) => {
@@ -63,54 +61,54 @@ export function LibraryPage() {
             }
             return (summaries[b.id]?.lastRun ?? "").localeCompare(summaries[a.id]?.lastRun ?? "");
         });
-    }, [programs, query, category, sort, summaries]);
+    }, [carts, query, category, sort, summaries]);
 
     const categories = useMemo(() => {
-        const values = new Set(programs.map((program) => program.info.category ?? "Uncategorized"));
+        const values = new Set(carts.map((cart) => cart.info.category ?? "Uncategorized"));
         return ["All", ...[...values].sort((a, b) => a.localeCompare(b))];
-    }, [programs]);
+    }, [carts]);
 
-    const actions: ProgramMenuActions = {
-        run: (program) => {
-            runProgram(program)
-                .then(() => notify(`Launched ${program.info.name} in DOSBox`, "success"))
+    const actions: CartMenuActions = {
+        run: (cart) => {
+            runCart(cart)
+                .then(() => notify(`Launched ${cart.info.name} in DOSBox`, "success"))
                 .catch((error) => notify(String(error), "error"));
         },
-        stop: (program) => {
-            stopProgram(program)
-                .then(() => notify(`${program.info.name} stopped`, "info"))
+        stop: (cart) => {
+            stopCart(cart)
+                .then(() => notify(`${cart.info.name} stopped`, "info"))
                 .catch((error) => notify(String(error), "error"));
         },
-        browse: (program) => {
-            api.openProgramFolder(program)
-                .then(() => notify(`Opened ${program.dir}`, "info"))
+        browse: (cart) => {
+            api.openCartFolder(cart)
+                .then(() => notify(`Opened ${cart.dir}`, "info"))
                 .catch((error) => notify(String(error), "error"));
         },
-        exportArchive: (program) => {
-            api.archiveProgram(program)
-                .then(() => notify(`Exported ${program.info.name}.cart`, "success"))
+        exportArchive: (cart) => {
+            api.archiveCart(cart)
+                .then(() => notify(`Exported ${cart.info.name}.cart`, "success"))
                 .catch((error) => notify(String(error), "error"));
         },
-        delete: (program) => setDeleting(program),
+        delete: (cart) => setDeleting(cart),
     };
 
     const confirmDelete = () => {
-        const program = deleting;
+        const cart = deleting;
         setDeleting(null);
-        if (!program) {
+        if (!cart) {
             return;
         }
-        api.deleteProgram(program)
+        api.deleteCart(cart)
             .then(() => refresh())
-            .then(() => notify(`${program.info.name} deleted`, "info"))
+            .then(() => notify(`${cart.info.name} deleted`, "info"))
             .catch((error) => notify(String(error), "error"));
     };
 
     const handleAdd = () => {
         setAdding(true);
-        addPrograms()
+        addCarts()
             .then((added) =>
-                notify(added.length > 0 ? `${added.length} new programs added` : "No new programs found", "success"),
+                notify(added.length > 0 ? `${added.length} new carts added` : "No new carts found", "success"),
             )
             .catch((error) => notify(String(error), "error"))
             .finally(() => setAdding(false));
@@ -177,10 +175,10 @@ export function LibraryPage() {
                             <MsIcon>{view === "grid" ? "view_list" : "grid_view"}</MsIcon>
                         </IconButton>
                     </Tooltip>
-                    <Tooltip title="Add programs">
+                    <Tooltip title="Add carts">
                         <span>
                             <IconButton
-                                aria-label="Add programs"
+                                aria-label="Add carts"
                                 disabled={adding}
                                 onClick={handleAdd}
                                 sx={{
@@ -203,7 +201,7 @@ export function LibraryPage() {
                             Nothing on this shelf
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            No program matches your filters.
+                            No cart matches your filters.
                         </Typography>
                         <Button
                             onClick={() => {
@@ -227,22 +225,22 @@ export function LibraryPage() {
                             },
                         }}
                     >
-                        {filtered.map((program) => (
-                            <ProgramCard
-                                key={program.id}
-                                program={program}
-                                running={runningIds.has(program.id)}
-                                summary={summaries[program.id]}
+                        {filtered.map((cart) => (
+                            <CartCard
+                                key={cart.id}
+                                cart={cart}
+                                running={runningIds.has(cart.id)}
+                                summary={summaries[cart.id]}
                                 actions={actions}
                             />
                         ))}
                     </Box>
                 ) : (
                     <TableContainer component={Paper} variant="outlined">
-                        <Table size="small" aria-label="Program list">
+                        <Table size="small" aria-label="Cart list">
                             <TableHead>
                                 <TableRow>
-                                    <TableCell>Program</TableCell>
+                                    <TableCell>Cart</TableCell>
                                     <TableCell>Category</TableCell>
                                     <TableCell>Year</TableCell>
                                     <TableCell>Playtime</TableCell>
@@ -252,12 +250,12 @@ export function LibraryPage() {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {filtered.map((program) => (
-                                    <ProgramRow
-                                        key={program.id}
-                                        program={program}
-                                        running={runningIds.has(program.id)}
-                                        summary={summaries[program.id]}
+                                {filtered.map((cart) => (
+                                    <CartRow
+                                        key={cart.id}
+                                        cart={cart}
+                                        running={runningIds.has(cart.id)}
+                                        summary={summaries[cart.id]}
                                         actions={actions}
                                     />
                                 ))}

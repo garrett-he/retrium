@@ -9,35 +9,35 @@ import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import { useEffect, useState } from "react";
-import type { Program, ProgramInfo } from "@/types";
+import type { Cart, CartInfo } from "@/types";
 
 const CATEGORIES = ["Action", "Strategy", "Simulation", "Puzzle", "Racing", "Uncategorized"];
 
-interface EditProgramDialogProps {
-    program: Program | null;
+interface EditCartDialogProps {
+    cart: Cart | null;
     onClose: () => void;
-    onSave: (program: Program, info: ProgramInfo) => Promise<void>;
+    onSave: (cart: Cart, info: CartInfo) => Promise<void>;
 }
 
-type ProgramDraft = Omit<ProgramInfo, "tags"> & { tagsText: string };
+type CartDraft = Omit<CartInfo, "tags"> & { tagsText: string };
 
-/** Modal form for editing program metadata; writes through to `.retrium/info.json`. */
-export function EditProgramDialog({ program, onClose, onSave }: EditProgramDialogProps) {
-    const [draft, setDraft] = useState<ProgramDraft | null>(null);
+/** Modal form for editing cart metadata; writes through to `.retrium/info.json`. */
+export function EditCartDialog({ cart, onClose, onSave }: EditCartDialogProps) {
+    const [draft, setDraft] = useState<CartDraft | null>(null);
 
     useEffect(() => {
-        setDraft(program ? { ...program.info, tagsText: (program.info.tags ?? []).join(", ") } : null);
-    }, [program]);
+        setDraft(cart ? { ...cart.info, tagsText: (cart.info.tags ?? []).join(", ") } : null);
+    }, [cart]);
 
-    if (!program || !draft) {
+    if (!cart || !draft) {
         return null;
     }
 
-    const set = <K extends keyof ProgramDraft>(key: K, value: ProgramDraft[K]) => {
+    const set = <K extends keyof CartDraft>(key: K, value: CartDraft[K]) => {
         setDraft((current) => (current ? { ...current, [key]: value } : current));
     };
 
-    const buildInfo = (): ProgramInfo => {
+    const buildInfo = (): CartInfo => {
         const { tagsText, ...rest } = draft;
         return {
             ...rest,
@@ -50,7 +50,7 @@ export function EditProgramDialog({ program, onClose, onSave }: EditProgramDialo
 
     return (
         <Dialog open maxWidth="sm" fullWidth onClose={onClose}>
-            <DialogTitle>Edit “{program.info.name}”</DialogTitle>
+            <DialogTitle>Edit “{cart.info.name}”</DialogTitle>
             <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "8px !important" }}>
                 <TextField
                     label="Name"
@@ -127,7 +127,7 @@ export function EditProgramDialog({ program, onClose, onSave }: EditProgramDialo
                 <Button
                     variant="contained"
                     disabled={draft.name.trim().length === 0}
-                    onClick={() => onSave(program, buildInfo())}
+                    onClick={() => onSave(cart, buildInfo())}
                 >
                     Save changes
                 </Button>

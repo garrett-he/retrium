@@ -5,7 +5,7 @@
 <h1 align="center">Retrium</h1>
 
 <p align="center">
-  A cross-platform desktop app to organise, launch and track your collection of old programs with DOSBox.
+  A cross-platform desktop app to organise, launch and track your collection of old carts with DOSBox.
 </p>
 
 <p align="center">
@@ -16,14 +16,14 @@
 
 ## Features
 
-- **Library management** — keep every program in its own folder with cover art, metadata and tags.
+- **Library management** — keep every cart in its own folder with cover art, metadata and tags.
 - **Rich metadata** — name, release year, category, language, developer, publisher, series and tags, all editable in the app.
 - **Browse and filter** — search, category filter, sorting and grid/list views.
 - **Multiple DOSBox versions** — register DOSBox, DOSBox-X or DOSBox Staging builds and pick the default or a specific one per launch.
-- **Per-program configuration** — every program carries its own `.retrium/dosbox.conf`.
-- **Saved states** — files written while a program runs are mirrored into the library and restored on the next launch.
-- **Play tracking** — last run, number of runs and total playtime per program, plus a page of currently running programs.
-- **Import and export** — export a program folder as a `.cart` archive and import it back into any library.
+- **Per-cart configuration** — every cart carries its own `.retrium/dosbox.conf`.
+- **Saved states** — files written while a cart runs are mirrored into the library and restored on the next launch.
+- **Play tracking** — last run, number of runs and total playtime per cart, plus a page of currently running carts.
+- **Import and export** — export a cart folder as a `.cart` archive and import it back into any library.
 - **First-run setup** — pick a library folder and DOSBox executable on first start; both can be changed later.
 - **Themes** — dark and light modes.
 
@@ -51,11 +51,11 @@ Retrium keeps everything inside the library folder you choose:
 
 ```text
 <library>/
-├── programs/
+├── carts/
 │   └── DOOM/
 │       ├── DOOM.EXE
 │       └── .retrium/
-│           ├── metadata.json   # program metadata
+│           ├── metadata.json   # cart metadata
 │           ├── cover.png       # optional cover art
 │           └── dosbox.conf     # optional DOSBox configuration
 ├── states/
@@ -64,7 +64,7 @@ Retrium keeps everything inside the library folder you choose:
     └── DOOM.json               # last run, runs and elapsed time
 ```
 
-A program folder is called a **cart**. Exporting one writes a `<id>.cart` archive (zip format) that can be
+A cart folder is called a **cart**. Exporting one writes a `<id>.cart` archive (zip format) that can be
 imported into any library; legacy `.zip`, `.tar.gz` and `.tgz` archives can still be imported.
 
 `metadata.json` is a plain JSON file, so libraries are easy to back up or edit by hand:

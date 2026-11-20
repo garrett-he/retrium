@@ -13,38 +13,38 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ActivityBars } from "@/components/ActivityBars";
 import { CoverArt } from "@/components/CoverArt";
-import { EditProgramDialog } from "@/components/EditProgramDialog";
+import { EditCartDialog } from "@/components/EditCartDialog";
 import { MsIcon } from "@/components/MsIcon";
 import { RunningChip } from "@/components/RunningChip";
 import { RunSplitButton } from "@/components/RunSplitButton";
-import { useProgramsContext } from "@/hooks/usePrograms";
+import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
 import { api } from "@/lib/api";
 import { formatDateTime, formatPlaytime } from "@/lib/format";
-import type { Program, ProgramInfo } from "@/types";
+import type { Cart, CartInfo } from "@/types";
 
-/** Program detail: hero, run controls, stats, metadata, editing and safe delete. */
-export function ProgramPage() {
+/** Cart detail: hero, run controls, stats, metadata, editing and safe delete. */
+export function CartPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { notify } = useSnackbar();
-    const { programs, dosboxVersions, processes, summaries, runProgram, stopProgram, saveProgramInfo, deleteProgram } =
-        useProgramsContext();
+    const { carts, dosboxVersions, processes, summaries, runCart, stopCart, saveCartInfo, deleteCart } =
+        useCartsContext();
 
     const [editing, setEditing] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
-    const program = useMemo(() => programs.find((item) => item.id === id), [programs, id]);
-    const running = useMemo(() => processes.some((process) => process.program.id === id), [processes, id]);
-    const summary = program ? summaries[program.id] : undefined;
+    const cart = useMemo(() => carts.find((item) => item.id === id), [carts, id]);
+    const running = useMemo(() => processes.some((process) => process.cart.id === id), [processes, id]);
+    const summary = cart ? summaries[cart.id] : undefined;
 
-    if (!program) {
+    if (!cart) {
         return (
             <Box className="fade-up">
                 <Box sx={{ px: 3, py: 6, textAlign: "center" }}>
-                    <Typography variant="h5">Program not found</Typography>
+                    <Typography variant="h5">Cart not found</Typography>
                     <Typography color="text.secondary" sx={{ mb: 2 }}>
-                        The requested program could not be found.
+                        The requested cart could not be found.
                     </Typography>
                     <Button variant="contained" onClick={() => navigate("/")}>
                         Back to library
@@ -54,7 +54,7 @@ export function ProgramPage() {
         );
     }
 
-    const info = program.info;
+    const info = cart.info;
     const statCards = [
         { icon: "event", label: "Last run", value: summary ? formatDateTime(summary.lastRun) : "—" },
         { icon: "schedule", label: "Total playtime", value: summary ? formatPlaytime(summary.elapsed) : "—" },
@@ -69,43 +69,43 @@ export function ProgramPage() {
         ["Developer", info.developer],
         ["Publisher", info.publisher],
         ["Series", info.series],
-        ["Directory", program.dir, true],
+        ["Directory", cart.dir, true],
     ];
 
     const handleRun = (version: string) => {
-        runProgram(program, version)
+        runCart(cart, version)
             .then(() => notify(`Launched ${info.name} in DOSBox ${version}`, "success"))
             .catch((error) => notify(String(error), "error"));
     };
 
     const handleStop = () => {
-        stopProgram(program)
+        stopCart(cart)
             .then(() => notify(`${info.name} stopped`, "info"))
             .catch((error) => notify(String(error), "error"));
     };
 
     const handleBrowse = () => {
-        api.openProgramFolder(program)
-            .then(() => notify(`Opened ${program.dir}`, "info"))
+        api.openCartFolder(cart)
+            .then(() => notify(`Opened ${cart.dir}`, "info"))
             .catch((error) => notify(String(error), "error"));
     };
 
     const handleExport = () => {
-        api.archiveProgram(program)
+        api.archiveCart(cart)
             .then(() => notify(`Exported ${info.name}.cart`, "success"))
             .catch((error) => notify(String(error), "error"));
     };
 
-    const handleSave = (target: Program, updatedInfo: ProgramInfo) => {
+    const handleSave = (target: Cart, updatedInfo: CartInfo) => {
         setEditing(false);
-        return saveProgramInfo(target, updatedInfo)
+        return saveCartInfo(target, updatedInfo)
             .then(() => notify("Metadata saved", "success"))
             .catch((error) => notify(String(error), "error"));
     };
 
     const confirmDelete = () => {
         setDeleting(false);
-        deleteProgram(program)
+        deleteCart(cart)
             .then(() => {
                 notify(`${info.name} deleted`, "info");
                 navigate("/");
@@ -125,7 +125,7 @@ export function ProgramPage() {
                 </Button>
 
                 <Box sx={{ position: "relative", mb: 3 }}>
-                    <CoverArt program={program} height={230} glyphSize={96} radius="16px" />
+                    <CoverArt cart={cart} height={230} glyphSize={96} radius="16px" />
                     <Box
                         sx={{
                             position: "absolute",
@@ -258,18 +258,14 @@ export function ProgramPage() {
                 </Box>
             </Box>
 
-            <EditProgramDialog
-                program={editing ? program : null}
-                onClose={() => setEditing(false)}
-                onSave={handleSave}
-            />
+            <EditCartDialog cart={editing ? cart : null} onClose={() => setEditing(false)} onSave={handleSave} />
 
             <Dialog open={deleting} onClose={() => setDeleting(false)}>
                 <DialogTitle>Delete “{info.name}”?</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        The folder <strong style={{ fontFamily: '"IBM Plex Mono", monospace' }}>{program.dir}</strong>{" "}
-                        and its saved states will be removed permanently. This action cannot be undone.
+                        The folder <strong style={{ fontFamily: '"IBM Plex Mono", monospace' }}>{cart.dir}</strong> and
+                        its saved states will be removed permanently. This action cannot be undone.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>

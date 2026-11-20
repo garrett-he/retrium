@@ -11,21 +11,19 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::config::Config;
-use crate::{
-    AppState, DosboxVersions, ProcessHandle, Program, ProgramInfo, ProgramProcess, ProgramRunOptions, ProgramSummary,
-};
+use crate::{AppState, Cart, CartInfo, CartProcess, CartRunOptions, CartSummary, DosboxVersions, ProcessHandle};
 
 // ---------------------------------------------------------------------------
 // Discovery helpers
 // ---------------------------------------------------------------------------
 
-fn discover_programs_inner(config: &Config) -> Vec<Program> {
-    let programs_dir = PathBuf::from(&config.library).join("programs");
-    let mut programs = Vec::new();
+fn discover_carts_inner(config: &Config) -> Vec<Cart> {
+    let carts_dir = PathBuf::from(&config.library).join("carts");
+    let mut carts = Vec::new();
 
-    let entries = match std::fs::read_dir(&programs_dir) {
+    let entries = match std::fs::read_dir(&carts_dir) {
         Ok(entries) => entries,
-        Err(_) => return programs,
+        Err(_) => return carts,
     };
 
     for entry in entries.flatten() {
@@ -40,7 +38,7 @@ fn discover_programs_inner(config: &Config) -> Vec<Program> {
         };
 
         let dir = path.to_string_lossy().to_string();
-        let info = load_program_info(&path, &id);
+        let info = load_cart_info(&path, &id);
         let cover = {
             let cover_path = path.join(".retrium").join("cover.png");
             if cover_path.exists() {
@@ -50,20 +48,20 @@ fn discover_programs_inner(config: &Config) -> Vec<Program> {
             }
         };
 
-        programs.push(Program { id, dir, info, cover });
+        carts.push(Cart { id, dir, info, cover });
     }
 
-    programs
+    carts
 }
 
-fn load_program_info(program_dir: &Path, fallback_name: &str) -> ProgramInfo {
-    let retrium_dir = program_dir.join(".retrium");
+fn load_cart_info(cart_dir: &Path, fallback_name: &str) -> CartInfo {
+    let retrium_dir = cart_dir.join(".retrium");
 
     // Older Tauri builds wrote `info.json`; `metadata.json` is the canonical name.
     for file in ["metadata.json", "info.json"] {
         let info_path = retrium_dir.join(file);
         if let Ok(content) = std::fs::read_to_string(&info_path) {
-            if let Ok(mut info) = serde_json::from_str::<ProgramInfo>(&content) {
+            if let Ok(mut info) = serde_json::from_str::<CartInfo>(&content) {
                 if info.name.is_empty() {
                     info.name = fallback_name.to_string();
                 }
@@ -72,9 +70,9 @@ fn load_program_info(program_dir: &Path, fallback_name: &str) -> ProgramInfo {
         }
     }
 
-    ProgramInfo {
+    CartInfo {
         name: fallback_name.to_string(),
-        ..ProgramInfo::default()
+        ..CartInfo::default()
     }
 }
 
@@ -82,18 +80,16 @@ fn load_program_info(program_dir: &Path, fallback_name: &str) -> ProgramInfo {
 // Summary helpers
 // ---------------------------------------------------------------------------
 
-fn summary_path(library: &str, program_id: &str) -> PathBuf {
-    PathBuf::from(library)
-        .join("summaries")
-        .join(format!("{program_id}.json"))
+fn summary_path(library: &str, cart_id: &str) -> PathBuf {
+    PathBuf::from(library).join("summaries").join(format!("{cart_id}.json"))
 }
 
-fn load_summary(path: &Path) -> Option<ProgramSummary> {
+fn load_summary(path: &Path) -> Option<CartSummary> {
     let content = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&content).ok()
 }
 
-fn save_summary(path: &Path, summary: &ProgramSummary) -> Result<(), String> {
+fn save_summary(path: &Path, summary: &CartSummary) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -183,9 +179,9 @@ fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Derive a program directory name from an archive file name.
+/// Derive a cart directory name from an archive file name.
 fn archive_stem(path: &Path) -> String {
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("program");
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("cart");
 
     for ext in [".tar.gz", ".tgz", ".cart", ".zip"] {
         if let Some(stripped) = name.strip_suffix(ext) {
@@ -200,16 +196,16 @@ fn archive_stem(path: &Path) -> String {
 // File watcher
 // ---------------------------------------------------------------------------
 
-/// Watch `program_dir` for created/modified files and mirror them into `states_dir`,
+/// Watch `cart_dir` for created/modified files and mirror them into `states_dir`,
 /// skipping the `.retrium` metadata folder. Runs until `stop_rx` receives a signal.
-fn run_watcher(program_dir: PathBuf, states_dir: PathBuf, stop_rx: std::sync::mpsc::Receiver<()>) {
+fn run_watcher(cart_dir: PathBuf, states_dir: PathBuf, stop_rx: std::sync::mpsc::Receiver<()>) {
     let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
 
     let watcher = match notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         let _ = tx.send(res);
     }) {
         Ok(mut watcher) => {
-            if let Err(e) = watcher.watch(&program_dir, notify::RecursiveMode::Recursive) {
+            if let Err(e) = watcher.watch(&cart_dir, notify::RecursiveMode::Recursive) {
                 eprintln!("retrium: watch error: {e}");
             }
             watcher
@@ -228,7 +224,7 @@ fn run_watcher(program_dir: PathBuf, states_dir: PathBuf, stop_rx: std::sync::mp
                         if !path.is_file() {
                             continue;
                         }
-                        let rel = match path.strip_prefix(&program_dir) {
+                        let rel = match path.strip_prefix(&cart_dir) {
                             Ok(rel) => rel,
                             Err(_) => continue,
                         };
@@ -265,39 +261,39 @@ fn run_watcher(program_dir: PathBuf, states_dir: PathBuf, stop_rx: std::sync::mp
 // Commands
 // ---------------------------------------------------------------------------
 
-/// List all programs found under `{library}/programs`.
+/// List all carts found under `{library}/carts`.
 #[tauri::command]
-pub fn discover_programs(state: State<'_, AppState>) -> Result<Vec<Program>, String> {
+pub fn discover_carts(state: State<'_, AppState>) -> Result<Vec<Cart>, String> {
     let config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    Ok(discover_programs_inner(&config))
+    Ok(discover_carts_inner(&config))
 }
 
-/// Launch a program in DOSBox, restoring saved states and tracking the process.
+/// Launch a cart in DOSBox, restoring saved states and tracking the process.
 #[tauri::command]
-pub async fn run_program(
-    options: ProgramRunOptions,
+pub async fn run_cart(
+    options: CartRunOptions,
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<ProgramProcess, String> {
-    let program = options.program.clone();
-    let program_id = program.id.clone();
+) -> Result<CartProcess, String> {
+    let cart = options.cart.clone();
+    let cart_id = cart.id.clone();
 
-    // Refuse to launch a program that is already running.
+    // Refuse to launch a cart that is already running.
     {
         let processes = state.processes.lock().map_err(|e| e.to_string())?;
-        if processes.contains_key(&program_id) {
-            return Err(format!("Program '{program_id}' is already running"));
+        if processes.contains_key(&cart_id) {
+            return Err(format!("Cart '{cart_id}' is already running"));
         }
     }
 
     let config = state.config.lock().map_err(|e| e.to_string())?.clone();
     let library = config.library.clone();
-    let program_dir = PathBuf::from(&program.dir);
+    let cart_dir = PathBuf::from(&cart.dir);
 
-    // Restore previously saved states into the program directory.
-    let states_dir = PathBuf::from(&library).join("states").join(&program_id);
+    // Restore previously saved states into the cart directory.
+    let states_dir = PathBuf::from(&library).join("states").join(&cart_id);
     if states_dir.exists() {
-        copy_dir_contents(&states_dir, &program_dir)?;
+        copy_dir_contents(&states_dir, &cart_dir)?;
     }
 
     // Resolve the DOSBox executable for the requested version.
@@ -309,9 +305,9 @@ pub async fn run_program(
     let dosbox_path = resolved.path.clone();
     let dosbox_name = resolved.name.clone();
 
-    let conf_path = program_dir.join(".retrium").join("dosbox.conf");
+    let conf_path = cart_dir.join(".retrium").join("dosbox.conf");
     let mut cmd = tokio::process::Command::new(&dosbox_path);
-    cmd.current_dir(&program_dir);
+    cmd.current_dir(&cart_dir);
     if conf_path.exists() {
         cmd.arg("-conf").arg(&conf_path);
     }
@@ -325,10 +321,10 @@ pub async fn run_program(
     {
         let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
         processes.insert(
-            program_id.clone(),
+            cart_id.clone(),
             ProcessHandle {
                 pid,
-                program: program.clone(),
+                cart: cart.clone(),
                 dosbox_version: dosbox_name.clone(),
                 started_at,
                 kill_tx,
@@ -337,12 +333,10 @@ pub async fn run_program(
     }
 
     let app_clone = app.clone();
-    let program_id_for_task = program_id.clone();
+    let cart_id_for_task = cart_id.clone();
     let library_for_task = library.clone();
-    let program_dir_for_task = program_dir.clone();
-    let states_dir_for_task = PathBuf::from(&library_for_task)
-        .join("states")
-        .join(&program_id_for_task);
+    let cart_dir_for_task = cart_dir.clone();
+    let states_dir_for_task = PathBuf::from(&library_for_task).join("states").join(&cart_id_for_task);
 
     tokio::spawn(async move {
         let mut child = child;
@@ -350,7 +344,7 @@ pub async fn run_program(
 
         let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
         let watcher_task = tokio::task::spawn_blocking(move || {
-            run_watcher(program_dir_for_task, states_dir_for_task, stop_rx);
+            run_watcher(cart_dir_for_task, states_dir_for_task, stop_rx);
         });
 
         // Wait for the process to exit, or kill it when requested.
@@ -368,7 +362,7 @@ pub async fn run_program(
 
         let elapsed = start.elapsed().as_secs() as i64;
 
-        let path = summary_path(&library_for_task, &program_id_for_task);
+        let path = summary_path(&library_for_task, &cart_id_for_task);
         let mut summary = load_summary(&path).unwrap_or_default();
         summary.runs += 1;
         summary.elapsed += elapsed;
@@ -379,25 +373,25 @@ pub async fn run_program(
 
         if let Some(app_state) = app_clone.try_state::<AppState>() {
             if let Ok(mut processes) = app_state.processes.lock() {
-                processes.remove(&program_id_for_task);
+                processes.remove(&cart_id_for_task);
             }
         }
     });
 
-    Ok(ProgramProcess {
+    Ok(CartProcess {
         pid,
-        program,
+        cart,
         dosbox_version: dosbox_name,
         started_at: started_at.to_rfc3339(),
     })
 }
 
-/// Stop a running program by signalling its DOSBox process to be killed.
+/// Stop a running cart by signalling its DOSBox process to be killed.
 #[tauri::command]
-pub fn stop_program(program: Program, state: State<'_, AppState>) -> Result<(), String> {
+pub fn stop_cart(cart: Cart, state: State<'_, AppState>) -> Result<(), String> {
     let handle = {
         let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
-        processes.remove(&program.id)
+        processes.remove(&cart.id)
     };
 
     match handle {
@@ -405,37 +399,37 @@ pub fn stop_program(program: Program, state: State<'_, AppState>) -> Result<(), 
             let _ = handle.kill_tx.send(());
             Ok(())
         }
-        None => Err(format!("Program '{}' is not running", program.id)),
+        None => Err(format!("Cart '{}' is not running", cart.id)),
     }
 }
 
-/// Open the program directory in the system file manager.
+/// Open the cart directory in the system file manager.
 #[tauri::command]
-pub fn open_program_folder(program: Program, app: AppHandle) -> Result<(), String> {
+pub fn open_cart_folder(cart: Cart, app: AppHandle) -> Result<(), String> {
     app.opener()
-        .open_path(program.dir.clone(), None::<&str>)
+        .open_path(cart.dir.clone(), None::<&str>)
         .map_err(|e| e.to_string())
 }
 
-/// Permanently delete a program directory from disk.
+/// Permanently delete a cart directory from disk.
 #[tauri::command]
-pub fn delete_program(program: Program) -> Result<(), String> {
-    let path = PathBuf::from(&program.dir);
+pub fn delete_cart(cart: Cart) -> Result<(), String> {
+    let path = PathBuf::from(&cart.dir);
     if path.exists() {
         std::fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 
-/// Export a program directory as a .cart archive chosen via a save dialog.
+/// Export a cart directory as a .cart archive chosen via a save dialog.
 #[tauri::command]
-pub async fn archive_program(program: Program, app: AppHandle) -> Result<(), String> {
+pub async fn archive_cart(cart: Cart, app: AppHandle) -> Result<(), String> {
     let file_path = app
         .dialog()
         .file()
         .add_filter("Retrium Carts", &["cart"])
         .add_filter("All Files", &["*"])
-        .set_file_name(format!("{}.cart", program.id))
+        .set_file_name(format!("{}.cart", cart.id))
         .blocking_save_file();
 
     let dest = match file_path {
@@ -443,15 +437,15 @@ pub async fn archive_program(program: Program, app: AppHandle) -> Result<(), Str
         None => return Ok(()),
     };
 
-    create_zip(&PathBuf::from(&program.dir), &dest)?;
+    create_zip(&PathBuf::from(&cart.dir), &dest)?;
     Ok(())
 }
 
-/// Extract an archive into `programs_dir` and return the resulting program id.
+/// Extract an archive into `carts_dir` and return the resulting cart id.
 ///
 /// When the archive contains exactly one top-level directory, that directory
-/// becomes the program directory. Otherwise the archive file name is used.
-fn import_archive(archive: &Path, programs_dir: &Path) -> Result<String, String> {
+/// becomes the cart directory. Otherwise the archive file name is used.
+fn import_archive(archive: &Path, carts_dir: &Path) -> Result<String, String> {
     let temp = std::env::temp_dir().join(format!(
         "retrium-import-{}-{}",
         std::process::id(),
@@ -485,7 +479,7 @@ fn import_archive(archive: &Path, programs_dir: &Path) -> Result<String, String>
             None => (archive_stem(archive), temp.clone()),
         };
 
-        let dest = programs_dir.join(&id);
+        let dest = carts_dir.join(&id);
         std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
         copy_dir_contents(&source, &dest)?;
 
@@ -498,7 +492,7 @@ fn import_archive(archive: &Path, programs_dir: &Path) -> Result<String, String>
 
 /// Import carts chosen via an open dialog into the library.
 #[tauri::command]
-pub async fn add_programs(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<Program>, String> {
+pub async fn add_carts(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<Cart>, String> {
     let files = app
         .dialog()
         .file()
@@ -513,28 +507,28 @@ pub async fn add_programs(app: AppHandle, state: State<'_, AppState>) -> Result<
     };
 
     let config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    let programs_dir = PathBuf::from(&config.library).join("programs");
-    std::fs::create_dir_all(&programs_dir).map_err(|e| e.to_string())?;
+    let carts_dir = PathBuf::from(&config.library).join("carts");
+    std::fs::create_dir_all(&carts_dir).map_err(|e| e.to_string())?;
 
     let mut new_ids = Vec::new();
     for file in files {
         let path = file.into_path().map_err(|e| e.to_string())?;
-        new_ids.push(import_archive(&path, &programs_dir)?);
+        new_ids.push(import_archive(&path, &carts_dir)?);
     }
 
-    let programs = discover_programs_inner(&config);
-    let result = programs.into_iter().filter(|p| new_ids.contains(&p.id)).collect();
+    let carts = discover_carts_inner(&config);
+    let result = carts.into_iter().filter(|p| new_ids.contains(&p.id)).collect();
 
     Ok(result)
 }
 
-/// Return the running process for a program, if any.
+/// Return the running process for a cart, if any.
 #[tauri::command]
-pub fn get_program_process(program: Program, state: State<'_, AppState>) -> Result<Option<ProgramProcess>, String> {
+pub fn get_cart_process(cart: Cart, state: State<'_, AppState>) -> Result<Option<CartProcess>, String> {
     let processes = state.processes.lock().map_err(|e| e.to_string())?;
-    Ok(processes.get(&program.id).map(|handle| ProgramProcess {
+    Ok(processes.get(&cart.id).map(|handle| CartProcess {
         pid: handle.pid,
-        program: handle.program.clone(),
+        cart: handle.cart.clone(),
         dosbox_version: handle.dosbox_version.clone(),
         started_at: handle.started_at.to_rfc3339(),
     }))
@@ -542,13 +536,13 @@ pub fn get_program_process(program: Program, state: State<'_, AppState>) -> Resu
 
 /// List every currently running DOSBox process.
 #[tauri::command]
-pub fn list_program_processes(state: State<'_, AppState>) -> Result<Vec<ProgramProcess>, String> {
+pub fn list_cart_processes(state: State<'_, AppState>) -> Result<Vec<CartProcess>, String> {
     let processes = state.processes.lock().map_err(|e| e.to_string())?;
     Ok(processes
         .values()
-        .map(|handle| ProgramProcess {
+        .map(|handle| CartProcess {
             pid: handle.pid,
-            program: handle.program.clone(),
+            cart: handle.cart.clone(),
             dosbox_version: handle.dosbox_version.clone(),
             started_at: handle.started_at.to_rfc3339(),
         })
@@ -557,7 +551,7 @@ pub fn list_program_processes(state: State<'_, AppState>) -> Result<Vec<ProgramP
 
 /// Stop every running DOSBox process, returning how many were stopped.
 #[tauri::command]
-pub fn stop_all_programs(state: State<'_, AppState>) -> Result<usize, String> {
+pub fn stop_all_carts(state: State<'_, AppState>) -> Result<usize, String> {
     let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
     let stopped = processes.len();
     for (_, handle) in processes.drain() {
@@ -566,33 +560,33 @@ pub fn stop_all_programs(state: State<'_, AppState>) -> Result<usize, String> {
     Ok(stopped)
 }
 
-/// Persist edited program metadata to `.retrium/metadata.json` on disk.
+/// Persist edited cart metadata to `.retrium/metadata.json` on disk.
 #[tauri::command]
-pub fn update_program_info(program: Program, info: ProgramInfo) -> Result<Program, String> {
+pub fn update_cart_info(cart: Cart, info: CartInfo) -> Result<Cart, String> {
     if info.name.trim().is_empty() {
-        return Err("Program name is required".to_string());
+        return Err("Cart name is required".to_string());
     }
 
-    let dir = PathBuf::from(&program.dir);
+    let dir = PathBuf::from(&cart.dir);
     let retrium_dir = dir.join(".retrium");
     std::fs::create_dir_all(&retrium_dir).map_err(|e| e.to_string())?;
     let content = serde_json::to_string_pretty(&info).map_err(|e| e.to_string())?;
     std::fs::write(retrium_dir.join("metadata.json"), content).map_err(|e| e.to_string())?;
 
-    Ok(Program { info, ..program })
+    Ok(Cart { info, ..cart })
 }
 
-/// Return the run summary for a program, if any.
+/// Return the run summary for a cart, if any.
 #[tauri::command]
-pub fn get_program_summary(program: Program, state: State<'_, AppState>) -> Result<Option<ProgramSummary>, String> {
+pub fn get_cart_summary(cart: Cart, state: State<'_, AppState>) -> Result<Option<CartSummary>, String> {
     let config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    let path = summary_path(&config.library, &program.id);
+    let path = summary_path(&config.library, &cart.id);
     Ok(load_summary(&path))
 }
 
-/// Return run summaries for every program that has one, keyed by program id.
+/// Return run summaries for every cart that has one, keyed by cart id.
 #[tauri::command]
-pub fn get_program_summaries(state: State<'_, AppState>) -> Result<HashMap<String, ProgramSummary>, String> {
+pub fn get_cart_summaries(state: State<'_, AppState>) -> Result<HashMap<String, CartSummary>, String> {
     let config = state.config.lock().map_err(|e| e.to_string())?.clone();
     let dir = PathBuf::from(&config.library).join("summaries");
     let mut summaries = HashMap::new();
@@ -799,7 +793,7 @@ mod tests {
     }
 
     #[test]
-    fn import_uses_single_top_level_folder_as_program_dir() {
+    fn import_uses_single_top_level_folder_as_cart_dir() {
         let root = scratch_dir("single-folder");
         let source = root.join("A").join("B");
         std::fs::create_dir_all(&source).unwrap();
@@ -808,13 +802,13 @@ mod tests {
         let archive = root.join("A.cart");
         create_zip(&root.join("A"), &archive).unwrap();
 
-        let programs = root.join("programs");
-        std::fs::create_dir_all(&programs).unwrap();
-        let id = import_archive(&archive, &programs).unwrap();
+        let carts = root.join("carts");
+        std::fs::create_dir_all(&carts).unwrap();
+        let id = import_archive(&archive, &carts).unwrap();
 
         assert_eq!(id, "B");
-        assert!(programs.join("B").join("xxx.exe").is_file());
-        assert!(!programs.join("A").exists());
+        assert!(carts.join("B").join("xxx.exe").is_file());
+        assert!(!carts.join("A").exists());
 
         std::fs::remove_dir_all(&root).unwrap();
     }
@@ -830,13 +824,13 @@ mod tests {
         let archive = root.join("Game.cart");
         create_zip(&source, &archive).unwrap();
 
-        let programs = root.join("programs");
-        std::fs::create_dir_all(&programs).unwrap();
-        let id = import_archive(&archive, &programs).unwrap();
+        let carts = root.join("carts");
+        std::fs::create_dir_all(&carts).unwrap();
+        let id = import_archive(&archive, &carts).unwrap();
 
         assert_eq!(id, "Game");
-        assert!(programs.join("Game").join("xxx.exe").is_file());
-        assert!(programs.join("Game").join("readme.txt").is_file());
+        assert!(carts.join("Game").join("xxx.exe").is_file());
+        assert!(carts.join("Game").join("readme.txt").is_file());
 
         std::fs::remove_dir_all(&root).unwrap();
     }
@@ -852,7 +846,7 @@ mod tests {
         )
         .unwrap();
 
-        let info = load_program_info(&root, "fallback");
+        let info = load_cart_info(&root, "fallback");
 
         assert_eq!(info.name, "Doom");
         assert_eq!(info.release, Some(1993));
@@ -868,7 +862,7 @@ mod tests {
         std::fs::create_dir_all(&retrium).unwrap();
         std::fs::write(retrium.join("info.json"), r#"{"name":"Wolfenstein 3D"}"#).unwrap();
 
-        let info = load_program_info(&root, "fallback");
+        let info = load_cart_info(&root, "fallback");
 
         assert_eq!(info.name, "Wolfenstein 3D");
 
@@ -880,7 +874,7 @@ mod tests {
         let root = scratch_dir("no-metadata");
         std::fs::create_dir_all(&root).unwrap();
 
-        let info = load_program_info(&root, "GAME");
+        let info = load_cart_info(&root, "GAME");
 
         assert_eq!(info.name, "GAME");
 

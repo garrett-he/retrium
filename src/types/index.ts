@@ -8,14 +8,14 @@ export interface DosboxVersions {
     versions: DosboxVersion[];
 }
 
-export interface Program {
+export interface Cart {
     id: string;
     dir: string;
-    info: ProgramInfo;
+    info: CartInfo;
     cover?: string;
 }
 
-export interface ProgramInfo {
+export interface CartInfo {
     name: string;
     language?: string;
     release?: number;
@@ -26,21 +26,21 @@ export interface ProgramInfo {
     tags?: string[];
 }
 
-export interface ProgramProcess {
+export interface CartProcess {
     pid: number;
-    program: Program;
+    cart: Cart;
     dosboxVersion: string;
     startedAt: string;
 }
 
-export interface ProgramSummary {
+export interface CartSummary {
     lastRun: string;
     runs: number;
     elapsed: number;
 }
 
-export interface ProgramRunOptions {
-    program: Program;
+export interface CartRunOptions {
+    cart: Cart;
     dosboxVersion: string;
 }
 

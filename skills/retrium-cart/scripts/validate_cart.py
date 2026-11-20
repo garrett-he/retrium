@@ -120,11 +120,11 @@ def check_archive_layout(cart: Cart) -> None:
         if parts:
             top_level.add(parts[0])
     if len(top_level) == 1 and cart.archive_root is not None:
-        print(f"  Archive root folder: {cart.archive_root} (used as the program id)")
+        print(f"  Archive root folder: {cart.archive_root} (used as the cart id)")
     else:
         warn(
             f"Zip has {len(top_level)} top-level entries or no containing folder; "
-            "wrap everything in one folder named after the desired program id so that folder becomes the id."
+            "wrap everything in one folder named after the desired cart id so that folder becomes the id."
         )
 
 
@@ -196,7 +196,7 @@ def check_config(cart: Cart) -> None:
 
     sections = set(re.findall(r"^\s*\[([^\]]+)\]", text, flags=re.MULTILINE))
     if "autoexec" not in sections:
-        error("dosbox.conf has no [autoexec] section; the program will not start automatically.")
+        error("dosbox.conf has no [autoexec] section; the cart will not start automatically.")
         return
 
     autoexec = text.split("[autoexec]", 1)[1]
@@ -208,7 +208,7 @@ def check_config(cart: Cart) -> None:
 
     mounts = [line for line in commands if re.match(r"(?i)^mount\s+\w+\s+", line)]
     if not mounts:
-        error("[autoexec] has no MOUNT command; mount the program directory (e.g. MOUNT C .).")
+        error("[autoexec] has no MOUNT command; mount the cart directory (e.g. MOUNT C .).")
     elif not any(re.match(r"(?i)^mount\s+c\s+\.\s*$", line) for line in mounts):
         warn("[autoexec] does not contain 'MOUNT C .'; verify the mounted path and working drive.")
 
@@ -241,7 +241,7 @@ def check_config(cart: Cart) -> None:
         warn(f"Unrecognized [autoexec] command: '{line}'.")
 
 
-def check_program_files(cart: Cart) -> None:
+def check_cart_files(cart: Cart) -> None:
     root_executables = [
         name
         for name in cart.files
@@ -279,7 +279,7 @@ def main() -> int:
     check_metadata(cart)
     check_cover(cart)
     check_config(cart)
-    check_program_files(cart)
+    check_cart_files(cart)
     cart.close()
 
     for message in warnings:

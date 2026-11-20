@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ProgramsProvider } from "@/hooks/usePrograms";
+import { CartsProvider } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
 import { RunningPage } from "./RunningPage";
 
@@ -13,7 +13,7 @@ vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: vi.fn((p: string) => p)
 const processes = [
     {
         pid: 100,
-        program: { id: "doom", dir: "/games/doom", info: { name: "Doom" } },
+        cart: { id: "doom", dir: "/games/doom", info: { name: "Doom" } },
         dosboxVersion: "DOSBox",
         startedAt: new Date().toISOString(),
     },
@@ -24,19 +24,19 @@ function mockBackend(running = processes) {
         if (cmd === "get_setup_state") {
             return { configured: true, library: "/games", dosbox: "/usr/bin/dosbox" };
         }
-        if (cmd === "discover_programs") {
-            return running.map((process) => process.program);
+        if (cmd === "discover_carts") {
+            return running.map((process) => process.cart);
         }
         if (cmd === "get_dosbox_versions") {
             return { default: "DOSBox", versions: [{ name: "DOSBox", path: "/usr/bin/dosbox" }] };
         }
-        if (cmd === "get_program_summaries") {
+        if (cmd === "get_cart_summaries") {
             return {};
         }
-        if (cmd === "list_program_processes") {
+        if (cmd === "list_cart_processes") {
             return running;
         }
-        if (cmd === "stop_all_programs") {
+        if (cmd === "stop_all_carts") {
             return running.length;
         }
         return [];
@@ -47,9 +47,9 @@ function renderPage() {
     return render(
         <MemoryRouter>
             <SnackbarProvider>
-                <ProgramsProvider>
+                <CartsProvider>
                     <RunningPage />
-                </ProgramsProvider>
+                </CartsProvider>
             </SnackbarProvider>
         </MemoryRouter>,
     );
@@ -74,7 +74,7 @@ describe("RunningPage", () => {
 
         await user.click(screen.getByRole("button", { name: "Stop" }));
 
-        expect(invoke).toHaveBeenCalledWith("stop_program", { program: processes[0].program });
+        expect(invoke).toHaveBeenCalledWith("stop_cart", { cart: processes[0].cart });
         expect(await screen.findByText("Doom stopped")).toBeTruthy();
     });
 
@@ -84,7 +84,7 @@ describe("RunningPage", () => {
             ...processes,
             {
                 pid: 101,
-                program: { id: "wolf", dir: "/games/wolf", info: { name: "Wolfenstein" } },
+                cart: { id: "wolf", dir: "/games/wolf", info: { name: "Wolfenstein" } },
                 dosboxVersion: "Staging",
                 startedAt: new Date().toISOString(),
             },
@@ -92,11 +92,11 @@ describe("RunningPage", () => {
         renderPage();
 
         expect(await screen.findByText("Wolfenstein")).toBeTruthy();
-        expect(screen.getByText("2 programs emulated in DOSBox")).toBeTruthy();
+        expect(screen.getByText("2 carts emulated in DOSBox")).toBeTruthy();
 
         await user.click(screen.getByRole("button", { name: "Stop all" }));
-        expect(invoke).toHaveBeenCalledWith("stop_all_programs");
-        expect(await screen.findByText("Stopped 2 programs")).toBeTruthy();
+        expect(invoke).toHaveBeenCalledWith("stop_all_carts");
+        expect(await screen.findByText("Stopped 2 carts")).toBeTruthy();
     });
 
     it("shows an empty state when nothing runs", async () => {

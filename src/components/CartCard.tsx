@@ -4,22 +4,22 @@ import CardActionArea from "@mui/material/CardActionArea";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useNavigate } from "react-router-dom";
+import { type CartMenuActions, CartMenuButton } from "@/components/CartMenu";
 import { CoverArt } from "@/components/CoverArt";
 import { MsIcon } from "@/components/MsIcon";
-import { type ProgramMenuActions, ProgramMenuButton } from "@/components/ProgramMenu";
 import { RunningChip } from "@/components/RunningChip";
 import { formatPlaytime } from "@/lib/format";
-import type { Program, ProgramSummary } from "@/types";
+import type { Cart, CartSummary } from "@/types";
 
-interface ProgramCardProps {
-    program: Program;
+interface CartCardProps {
+    cart: Cart;
     running: boolean;
-    summary?: ProgramSummary;
-    actions: ProgramMenuActions;
+    summary?: CartSummary;
+    actions: CartMenuActions;
 }
 
 /** Grid card showing cover art, quick metadata and a kebab menu. */
-export function ProgramCard({ program, running, summary, actions }: ProgramCardProps) {
+export function CartCard({ cart, running, summary, actions }: CartCardProps) {
     const navigate = useNavigate();
 
     return (
@@ -29,9 +29,9 @@ export function ProgramCard({ program, running, summary, actions }: ProgramCardP
                 "&:hover": { transform: "translateY(-4px)", boxShadow: "0 14px 30px -12px rgba(0,0,0,.5)" },
             }}
         >
-            <CardActionArea onClick={() => navigate(`/programs/${program.id}`)} sx={{ height: "100%" }}>
+            <CardActionArea onClick={() => navigate(`/carts/${cart.id}`)} sx={{ height: "100%" }}>
                 <Box sx={{ position: "relative" }}>
-                    <CoverArt program={program} height={132} glyphSize={54} />
+                    <CoverArt cart={cart} height={132} glyphSize={54} />
                     {running && (
                         <Box sx={{ position: "absolute", top: 8, left: 8 }}>
                             <RunningChip small />
@@ -42,14 +42,14 @@ export function ProgramCard({ program, running, summary, actions }: ProgramCardP
                     <Typography
                         sx={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                     >
-                        {program.info.name}
+                        {cart.info.name}
                     </Typography>
                     <Typography
                         variant="caption"
                         color="text.secondary"
                         sx={{ fontFamily: '"IBM Plex Mono", monospace' }}
                     >
-                        {program.info.release ?? "—"} · {program.info.category ?? "Uncategorized"}
+                        {cart.info.release ?? "—"} · {cart.info.category ?? "Uncategorized"}
                     </Typography>
                     <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1 }}>
                         <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
@@ -67,8 +67,8 @@ export function ProgramCard({ program, running, summary, actions }: ProgramCardP
                     </Stack>
                 </Box>
             </CardActionArea>
-            <ProgramMenuButton
-                program={program}
+            <CartMenuButton
+                cart={cart}
                 running={running}
                 actions={actions}
                 sx={{ position: "absolute", top: 6, right: 6, color: "#fff", bgcolor: "rgba(23,20,18,0.55)" }}

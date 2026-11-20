@@ -1,18 +1,18 @@
 import { createContext, createElement, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { DosboxVersions, Program, ProgramInfo, ProgramProcess, ProgramSummary, SetupState } from "@/types";
+import type { Cart, CartInfo, CartProcess, CartSummary, DosboxVersions, SetupState } from "@/types";
 
-export function usePrograms() {
-    const [programs, setPrograms] = useState<Program[]>([]);
+export function useCarts() {
+    const [carts, setCarts] = useState<Cart[]>([]);
     const [dosboxVersions, setDosboxVersions] = useState<DosboxVersions>({ default: "", versions: [] });
-    const [processes, setProcesses] = useState<ProgramProcess[]>([]);
-    const [summaries, setSummaries] = useState<Record<string, ProgramSummary>>({});
+    const [processes, setProcesses] = useState<CartProcess[]>([]);
+    const [summaries, setSummaries] = useState<Record<string, CartSummary>>({});
     const [setupState, setSetupState] = useState<SetupState | null>(null);
     const [loading, setLoading] = useState(true);
 
     const refresh = useCallback(async () => {
-        const [list, summaryMap] = await Promise.all([api.discoverPrograms(), api.getProgramSummaries()]);
-        setPrograms(list);
+        const [list, summaryMap] = await Promise.all([api.discoverCarts(), api.getCartSummaries()]);
+        setCarts(list);
         setSummaries(summaryMap);
     }, []);
 
@@ -21,7 +21,7 @@ export function usePrograms() {
     }, []);
 
     const refreshProcesses = useCallback(async () => {
-        setProcesses(await api.listProgramProcesses());
+        setProcesses(await api.listCartProcesses());
     }, []);
 
     useEffect(() => {
@@ -60,47 +60,47 @@ export function usePrograms() {
         [refresh],
     );
 
-    const runProgram = useCallback(
-        async (program: Program, version?: string) => {
+    const runCart = useCallback(
+        async (cart: Cart, version?: string) => {
             const name = version ?? defaultVersionName();
             if (!name) {
                 throw new Error("No DOSBox version configured");
             }
-            await api.runProgram({ program, dosboxVersion: name });
+            await api.runCart({ cart, dosboxVersion: name });
             await refreshProcesses();
         },
         [defaultVersionName, refreshProcesses],
     );
 
-    const stopProgram = useCallback(
-        async (program: Program) => {
-            await api.stopProgram(program);
+    const stopCart = useCallback(
+        async (cart: Cart) => {
+            await api.stopCart(cart);
             await refreshProcesses();
         },
         [refreshProcesses],
     );
 
-    const stopAllPrograms = useCallback(async () => {
-        const stopped = await api.stopAllPrograms();
+    const stopAllCarts = useCallback(async () => {
+        const stopped = await api.stopAllCarts();
         await refreshProcesses();
         return stopped;
     }, [refreshProcesses]);
 
-    const addPrograms = useCallback(async () => {
-        const added = await api.addPrograms();
+    const addCarts = useCallback(async () => {
+        const added = await api.addCarts();
         await refresh();
         return added;
     }, [refresh]);
 
-    const saveProgramInfo = useCallback(async (program: Program, info: ProgramInfo) => {
-        const updated = await api.updateProgramInfo(program, info);
-        setPrograms((list) => list.map((item) => (item.id === updated.id ? updated : item)));
+    const saveCartInfo = useCallback(async (cart: Cart, info: CartInfo) => {
+        const updated = await api.updateCartInfo(cart, info);
+        setCarts((list) => list.map((item) => (item.id === updated.id ? updated : item)));
         return updated;
     }, []);
 
-    const deleteProgram = useCallback(
-        async (program: Program) => {
-            await api.deleteProgram(program);
+    const deleteCart = useCallback(
+        async (cart: Cart) => {
+            await api.deleteCart(cart);
             await refresh();
         },
         [refresh],
@@ -131,7 +131,7 @@ export function usePrograms() {
     );
 
     return {
-        programs,
+        carts,
         dosboxVersions,
         processes,
         summaries,
@@ -140,31 +140,31 @@ export function usePrograms() {
         refresh,
         completeSetup,
         changeLibraryDirectory,
-        runProgram,
-        stopProgram,
-        stopAllPrograms,
-        addPrograms,
-        saveProgramInfo,
-        deleteProgram,
+        runCart,
+        stopCart,
+        stopAllCarts,
+        addCarts,
+        saveCartInfo,
+        deleteCart,
         addDosboxVersion,
         removeDosboxVersion,
         setDefaultDosboxVersion,
     };
 }
 
-type ProgramsContextValue = ReturnType<typeof usePrograms>;
+type CartsContextValue = ReturnType<typeof useCarts>;
 
-const ProgramsContext = createContext<ProgramsContextValue | null>(null);
+const CartsContext = createContext<CartsContextValue | null>(null);
 
-export function ProgramsProvider({ children }: { children: ReactNode }) {
-    const value = usePrograms();
-    return createElement(ProgramsContext.Provider, { value }, children);
+export function CartsProvider({ children }: { children: ReactNode }) {
+    const value = useCarts();
+    return createElement(CartsContext.Provider, { value }, children);
 }
 
-export function useProgramsContext(): ProgramsContextValue {
-    const ctx = useContext(ProgramsContext);
+export function useCartsContext(): CartsContextValue {
+    const ctx = useContext(CartsContext);
     if (!ctx) {
-        throw new Error("useProgramsContext must be used within a ProgramsProvider");
+        throw new Error("useCartsContext must be used within a CartsProvider");
     }
     return ctx;
 }

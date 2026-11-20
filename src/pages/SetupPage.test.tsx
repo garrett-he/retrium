@@ -54,7 +54,7 @@ describe("SetupPage", () => {
         const { onComplete, onFinished } = renderPage();
 
         await user.click(screen.getByTestId("continue"));
-        expect(screen.getByText("Which DOSBox should launch your programs?")).toBeTruthy();
+        expect(screen.getByText("Which DOSBox should launch your carts?")).toBeTruthy();
 
         const dosbox = screen.getByLabelText("DOSBox executable");
         await user.clear(dosbox);

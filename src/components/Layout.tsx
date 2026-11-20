@@ -7,7 +7,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { MsIcon } from "@/components/MsIcon";
 import { Sidebar } from "@/components/Sidebar";
 import { TopBar } from "@/components/TopBar";
-import { useProgramsContext } from "@/hooks/usePrograms";
+import { useCartsContext } from "@/hooks/useCarts";
 import type { ThemeMode } from "@/theme";
 
 const TITLES: Record<string, string> = {
@@ -18,11 +18,11 @@ const TITLES: Record<string, string> = {
 
 /** App shell with sidebar, contextual top bar and routed content. */
 export function Layout({ mode, onModeChange }: { mode: ThemeMode; onModeChange: (mode: ThemeMode) => void }) {
-    const { processes, refresh } = useProgramsContext();
+    const { processes, refresh } = useCartsContext();
     const { pathname } = useLocation();
-    const programDetail = pathname.startsWith("/programs/");
+    const cartDetail = pathname.startsWith("/carts/");
 
-    const title = programDetail ? "Program" : (TITLES[pathname] ?? "Library");
+    const title = cartDetail ? "Cart" : (TITLES[pathname] ?? "Library");
 
     return (
         <Box sx={{ display: "flex", minHeight: "100vh" }}>

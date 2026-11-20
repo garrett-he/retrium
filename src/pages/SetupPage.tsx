@@ -74,7 +74,7 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                         Welcome to Retrium
                     </Typography>
                     <Typography color="text.secondary" align="center">
-                        Three quick steps and your shelf of old programs is ready.
+                        Three quick steps and your shelf of old carts is ready.
                     </Typography>
                 </Stack>
 
@@ -140,10 +140,10 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                     {step === 0 && (
                         <Stack spacing={2} className="fade-up">
                             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                                Where should Retrium keep your programs?
+                                Where should Retrium keep your carts?
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                Each program gets its own sub-folder here, together with saved states and metadata.
+                                Each cart gets its own sub-folder here, together with saved states and metadata.
                             </Typography>
                             <PathField
                                 label="Library directory"
@@ -169,7 +169,7 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                     {step === 1 && (
                         <Stack spacing={2} className="fade-up">
                             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                                Which DOSBox should launch your programs?
+                                Which DOSBox should launch your carts?
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
                                 Point to DOSBox.exe (or the binary on macOS/Linux). More versions can be added later in
@@ -218,7 +218,7 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                                 color="text.secondary"
                                 sx={{ fontFamily: '"IBM Plex Mono", monospace' }}
                             >
-                                Discovering programs in {library}…
+                                Discovering carts in {library}…
                             </Typography>
                             <Button
                                 data-testid="enter-library"

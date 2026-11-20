@@ -5,27 +5,27 @@ import MenuItem from "@mui/material/MenuItem";
 import type { SxProps, Theme } from "@mui/material/styles";
 import { type MouseEvent, useState } from "react";
 import { MsIcon } from "@/components/MsIcon";
-import type { Program } from "@/types";
+import type { Cart } from "@/types";
 
-export interface ProgramMenuActions {
-    run?: (program: Program) => void;
-    stop?: (program: Program) => void;
-    browse?: (program: Program) => void;
-    exportArchive?: (program: Program) => void;
-    edit?: (program: Program) => void;
-    delete?: (program: Program) => void;
+export interface CartMenuActions {
+    run?: (cart: Cart) => void;
+    stop?: (cart: Cart) => void;
+    browse?: (cart: Cart) => void;
+    exportArchive?: (cart: Cart) => void;
+    edit?: (cart: Cart) => void;
+    delete?: (cart: Cart) => void;
 }
 
-interface ProgramMenuButtonProps {
-    program: Program;
+interface CartMenuButtonProps {
+    cart: Cart;
     running: boolean;
-    actions: ProgramMenuActions;
+    actions: CartMenuActions;
     iconSize?: number;
     sx?: SxProps<Theme>;
 }
 
-/** Kebab menu with quick actions for a program. */
-export function ProgramMenuButton({ program, running, actions, iconSize = 18, sx }: ProgramMenuButtonProps) {
+/** Kebab menu with quick actions for a cart. */
+export function CartMenuButton({ cart, running, actions, iconSize = 18, sx }: CartMenuButtonProps) {
     const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
     const open = (event: MouseEvent<HTMLElement>) => {
@@ -36,7 +36,7 @@ export function ProgramMenuButton({ program, running, actions, iconSize = 18, sx
 
     return (
         <>
-            <IconButton size="small" aria-label="Program menu" onClick={open} sx={{ color: "text.primary", ...sx }}>
+            <IconButton size="small" aria-label="Cart menu" onClick={open} sx={{ color: "text.primary", ...sx }}>
                 <MsIcon sx={{ fontSize: iconSize }}>more_vert</MsIcon>
             </IconButton>
             <Menu anchorEl={anchorEl} open={anchorEl !== null} onClose={close}>
@@ -44,7 +44,7 @@ export function ProgramMenuButton({ program, running, actions, iconSize = 18, sx
                     <MenuItem
                         onClick={() => {
                             close();
-                            actions.stop?.(program);
+                            actions.stop?.(cart);
                         }}
                     >
                         <MsIcon sx={{ fontSize: 18, mr: 1.5, color: "error.main" }}>stop</MsIcon> Stop
@@ -54,7 +54,7 @@ export function ProgramMenuButton({ program, running, actions, iconSize = 18, sx
                         <MenuItem
                             onClick={() => {
                                 close();
-                                actions.run?.(program);
+                                actions.run?.(cart);
                             }}
                         >
                             <MsIcon sx={{ fontSize: 18, mr: 1.5, color: "success.main" }}>play_arrow</MsIcon> Run with
@@ -66,7 +66,7 @@ export function ProgramMenuButton({ program, running, actions, iconSize = 18, sx
                     <MenuItem
                         onClick={() => {
                             close();
-                            actions.browse?.(program);
+                            actions.browse?.(cart);
                         }}
                     >
                         <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>folder_open</MsIcon> Open folder
@@ -76,7 +76,7 @@ export function ProgramMenuButton({ program, running, actions, iconSize = 18, sx
                     <MenuItem
                         onClick={() => {
                             close();
-                            actions.exportArchive?.(program);
+                            actions.exportArchive?.(cart);
                         }}
                     >
                         <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>archive</MsIcon> Export cart
@@ -87,7 +87,7 @@ export function ProgramMenuButton({ program, running, actions, iconSize = 18, sx
                     <MenuItem
                         onClick={() => {
                             close();
-                            actions.edit?.(program);
+                            actions.edit?.(cart);
                         }}
                     >
                         <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>edit</MsIcon> Edit details
@@ -97,7 +97,7 @@ export function ProgramMenuButton({ program, running, actions, iconSize = 18, sx
                     <MenuItem
                         onClick={() => {
                             close();
-                            actions.delete?.(program);
+                            actions.delete?.(cart);
                         }}
                         sx={{ color: "error.main" }}
                     >

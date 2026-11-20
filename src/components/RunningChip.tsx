@@ -6,7 +6,7 @@ interface RunningChipProps {
     sx?: SxProps<Theme>;
 }
 
-/** Pulsing badge indicating a program is currently emulated. */
+/** Pulsing badge indicating a cart is currently emulated. */
 export function RunningChip({ small = false, sx }: RunningChipProps) {
     return (
         <Chip

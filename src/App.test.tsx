@@ -13,13 +13,13 @@ const mocks = vi.hoisted(() => ({
             }
             return { configured: mocks.configured, library: "/games", dosbox: "/usr/bin/dosbox" };
         }
-        if (cmd === "discover_programs") {
+        if (cmd === "discover_carts") {
             return [{ id: "doom", dir: "/games/doom", info: { name: "Doom", category: "Action" } }];
         }
         if (cmd === "get_dosbox_versions") {
             return { default: "DOSBox", versions: [{ name: "DOSBox", path: "/usr/bin/dosbox" }] };
         }
-        if (cmd === "get_program_summaries") {
+        if (cmd === "get_cart_summaries") {
             return { doom: { lastRun: "2026-01-01T00:00:00Z", runs: 2, elapsed: 3600 } };
         }
         return [];
@@ -68,6 +68,6 @@ describe("App", () => {
 
         mocks.invoke.mockClear();
         await user.click(screen.getByLabelText("Rescan"));
-        expect(mocks.invoke).toHaveBeenCalledWith("discover_programs");
+        expect(mocks.invoke).toHaveBeenCalledWith("discover_carts");
     });
 });

@@ -3,10 +3,10 @@ import ThemeProvider from "@mui/material/styles/ThemeProvider";
 import { useMemo } from "react";
 import { createHashRouter, Navigate, RouterProvider } from "react-router-dom";
 import { Layout, LoadingScreen, useThemeMode } from "@/components/Layout";
-import { ProgramsProvider, useProgramsContext } from "@/hooks/usePrograms";
+import { CartsProvider, useCartsContext } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
+import { CartPage } from "@/pages/CartPage";
 import { LibraryPage } from "@/pages/LibraryPage";
-import { ProgramPage } from "@/pages/ProgramPage";
 import { RunningPage } from "@/pages/RunningPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { SetupPage } from "@/pages/SetupPage";
@@ -19,7 +19,7 @@ function AppContent({
     mode: "dark" | "light";
     onModeChange: (mode: "dark" | "light") => void;
 }) {
-    const { loading, setupState, completeSetup } = useProgramsContext();
+    const { loading, setupState, completeSetup } = useCartsContext();
 
     if (loading || !setupState) {
         return <LoadingScreen />;
@@ -47,7 +47,7 @@ function createAppRouter(mode: "dark" | "light", onModeChange: (mode: "dark" | "
             element: <Layout mode={mode} onModeChange={onModeChange} />,
             children: [
                 { index: true, element: <LibraryPage /> },
-                { path: "programs/:id", element: <ProgramPage /> },
+                { path: "carts/:id", element: <CartPage /> },
                 { path: "running", element: <RunningPage /> },
                 { path: "settings", element: <SettingsPage mode={mode} onModeChange={onModeChange} /> },
                 { path: "*", element: <Navigate to="/" replace /> },
@@ -64,9 +64,9 @@ export function App() {
         <ThemeProvider theme={theme}>
             <CssBaseline />
             <SnackbarProvider>
-                <ProgramsProvider>
+                <CartsProvider>
                     <AppContent mode={mode} onModeChange={setMode} />
-                </ProgramsProvider>
+                </CartsProvider>
             </SnackbarProvider>
         </ThemeProvider>
     );
