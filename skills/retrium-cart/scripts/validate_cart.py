@@ -39,7 +39,6 @@ class Cart:
         self.path = path
         self.zip: zipfile.ZipFile | None = None
         self.root = path
-        self.archive_root: str | None = None
         self.raw_files: dict[str, str] = {}
         self.raw_directories: set[str] = set()
         self.files: dict[str, str] = {}
@@ -71,28 +70,13 @@ class Cart:
         self._set_root()
 
     def _set_root(self) -> None:
-        """Strip the single top-level folder from a zip, as Retrium does on import."""
-        top_level: set[str] = set()
-        for name in [*self.raw_files, *self.raw_directories]:
-            parts = PurePosixPath(name).parts
-            if parts:
-                top_level.add(parts[0])
-
-        prefix = ""
-        if self.zip is not None and len(top_level) == 1:
-            only = next(iter(top_level))
-            if any(name.startswith(f"{only}/") for name in [*self.raw_files, *self.raw_directories]):
-                prefix = f"{only}/"
-                self.archive_root = only
-
+        """Keep archive paths verbatim: Retrium extracts into carts/<sha1> without stripping folders."""
         for name, raw in self.raw_files.items():
-            if name.startswith(prefix):
-                self.files[name[len(prefix) :]] = raw
+            self.files[name] = raw
         for name in self.raw_directories:
-            if name.startswith(prefix):
-                stripped = name[len(prefix) :].rstrip("/")
-                if stripped:
-                    self.directories.add(stripped)
+            stripped = name.rstrip("/")
+            if stripped:
+                self.directories.add(stripped)
 
     def read_bytes(self, relative: str) -> bytes:
         raw = self.files[relative]
@@ -119,13 +103,17 @@ def check_archive_layout(cart: Cart) -> None:
         parts = PurePosixPath(name).parts
         if parts:
             top_level.add(parts[0])
-    if len(top_level) == 1 and cart.archive_root is not None:
-        print(f"  Archive root folder: {cart.archive_root} (used as the cart id)")
-    else:
-        warn(
-            f"Zip has {len(top_level)} top-level entries or no containing folder; "
-            "wrap everything in one folder named after the desired cart id so that folder becomes the id."
-        )
+    if len(top_level) == 1:
+        only = next(iter(top_level))
+        if any(name.startswith(f"{only}/") for name in cart.raw_files):
+            warn(
+                f"Zip wraps everything in a single top-level folder '{only}'. Retrium extracts verbatim "
+                "into carts/<sha1>, so .retrium/ would end up one level too deep. Put cart contents at the zip root."
+            )
+    if not cart.exists(".retrium/metadata.json") and any(
+        n.endswith("/.retrium/metadata.json") for n in cart.files
+    ):
+        warn("Cart contents appear nested under a wrapper folder; Retrium needs .retrium/ at the archive root.")
 
 
 def check_metadata(cart: Cart) -> None:

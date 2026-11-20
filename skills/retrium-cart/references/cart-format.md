@@ -22,8 +22,9 @@ state mirroring). Load it when detailed field rules or edge cases matter.
 ```
 
 Discovery iterates directories under `<library>/carts`. Each subdirectory becomes a `Cart` whose `id`
-is the directory basename. The `.retrium` folder holds all app-managed metadata; everything else is treated
-as cart data.
+is the directory basename. For carts added through import that basename is the archive file's SHA-1;
+carts placed in the library by other means keep whatever directory name they were given. The `.retrium`
+folder holds all app-managed metadata; everything else is treated as cart data.
 
 ## `metadata.json`
 
@@ -92,15 +93,16 @@ The `[autoexec]` section is where the cart is mounted and launched. See `dosbox-
 a legacy filter. `import_archive` extracts every selection with `zip::ZipArchive`, so a cart must use real
 ZIP compression regardless of its extension.
 
-Extraction goes to a temporary directory, then:
+The archive file's SHA-1 (lowercase hex, 40 chars) is the cart id. `import_archive` extracts the archive
+contents verbatim into `<library>/carts/<sha1>/`; top-level folder and file names inside the archive do
+not affect the id. If `<library>/carts/<sha1>/` already exists the import is refused with an "already in
+the library" error and nothing is overwritten, so the same archive cannot be imported twice. The SHA-1 is
+also the key for `<library>/states/<sha1>/` and `<library>/summaries/<sha1>.json`.
 
-- If the cart contains **exactly one top-level entry and it is a directory**, that directory's name is
-  the cart id and its contents are copied into `<library>/carts/<id>/`.
-- Otherwise, the archive file name with its extension removed is the cart id, and all extracted root
-  entries are copied into that directory. `archive_stem` strips `.cart` as well as the legacy extensions.
-
-`archive_cart` always writes a cart named `<id>.cart` containing the cart directory's contents,
-including `.retrium/`. Saved states and summaries are not part of the cart.
+`archive_cart` always writes a zip-format cart named `<id>.cart` containing the cart directory's contents
+at the archive root, including `.retrium/`. The default filename is the cart id, which for an imported cart
+is its SHA-1; renaming the file afterwards does not change the cart id. Saved states and summaries are not
+part of the cart.
 
 ## State mirroring
 
@@ -116,11 +118,12 @@ Consequences for cart authors:
 ## Minimal valid cart
 
 ```text
-DOOM/
+DOOM/                       # staging folder name; ignored on import
 ├── DOOM.EXE
 └── .retrium/
     └── metadata.json   {"name": "Doom", "release": 1993}
 ```
 
-With no `dosbox.conf`, DOSBox starts without `-conf` in the cart directory, so the user must mount and
-run the game manually. Include a config for an out-of-the-box experience.
+Zip the **contents** of `DOOM/` (not the folder itself) into `*.cart`, so the archive root holds `DOOM.EXE`
+and `.retrium/`. With no `dosbox.conf`, DOSBox starts without `-conf` in the cart directory, so the user
+must mount and run the game manually. Include a config for an out-of-the-box experience.

@@ -51,15 +51,16 @@ Run `pnpm typecheck`, `pnpm lint`, `pnpm test` for frontend changes and
 ## Data model
 
 - Carts live at `<library>/carts/<id>/`.
-- Metadata is `<cart>/.retrium/metadata.json`; the legacy `info.json` is read
-  as a fallback but must never be written. Optional `cover.png` and
-  `dosbox.conf` live beside it.
+- Cart ids are the lowercase hex SHA-1 of the imported archive file. Metadata is
+  `<cart>/.retrium/metadata.json`; the legacy `info.json` is read as a fallback
+  but must never be written. Optional `cover.png` and `dosbox.conf` live beside it.
 - Saved states are mirrored to `<library>/states/<id>/` and restored before a run.
 - Play summaries are stored at `<library>/summaries/<id>.json`.
 - A cart folder is called a cart; exporting writes `<id>.cart` (zip format),
   and legacy `.zip`, `.tar.gz` and `.tgz` archives can also be imported.
-- Importing a cart with a single top-level folder uses that folder as the cart
-  directory; otherwise the archive file name is used.
+- Import extracts the archive contents verbatim into `<library>/carts/<sha1>/`,
+  using the archive SHA-1 as the cart id. If that directory already exists the
+  import is refused with an error and nothing is overwritten.
 - Never modify a user's library data outside the app's own commands.
 
 ## Versioning and release

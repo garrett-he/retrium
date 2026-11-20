@@ -3025,9 +3025,11 @@ version = "0.2.1"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
+ "hex",
  "notify",
  "serde",
  "serde_json",
+ "sha1",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

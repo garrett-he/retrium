@@ -23,20 +23,22 @@ disk (`discover_carts`, `load_cart_info`, `run_cart`, `import_archive` in
 ## Cart layout
 
 ```text
-<cart-id>/
-├── CART.EXE          # executable and all game data at the root
-├── *.BAT / *.COM / ...  # anything the cart needs at runtime
+<staging-dir>/                   # any name; ignored on import — the .cart file's SHA-1 becomes the id
+├── CART.EXE                     # executable and all game data at the root
+├── *.BAT / *.COM / ...          # anything the cart needs at runtime
 └── .retrium/
-    ├── metadata.json    # canonical metadata; write this file
-    ├── dosbox.conf      # optional; passed to DOSBox with -conf
-    └── cover.png        # optional; exact filename, lowercase
+    ├── metadata.json            # canonical metadata; write this file
+    ├── dosbox.conf              # optional; passed to DOSBox with -conf
+    └── cover.png                # optional; exact filename, lowercase
 ```
 
 Hard rules derived from the backend:
 
-- The **cart id** is the directory basename under `<library>/carts/<id>/`. It is also used for
-  `<library>/states/<id>/` and `<library>/summaries/<id>.json`. Keep it unique, stable, and free of path
-  separators or reserved characters; prefer the cart's short ASCII title.
+- The **cart id** is the archive file's SHA-1 (40 lowercase hex chars). On import Retrium creates
+  `<library>/carts/<sha1>/` and uses the same value for `<library>/states/<sha1>/` and
+  `<library>/summaries/<sha1>.json`. Staging directory and zip entry names never affect the id. Editing or
+  re-exporting a cart changes its SHA-1 and therefore yields a different cart; importing byte-identical
+  archives twice is refused as a duplicate.
 - Retrium launches DOSBox with the **cart directory as the working directory** and a config that
   normally mounts it as `C:` (`MOUNT C .`). Keep executable paths relative to that root.
 - Files created or modified during play **outside `.retrium/`** are mirrored to `<library>/states/<id>/`
@@ -50,9 +52,10 @@ Hard rules derived from the backend:
 
 ### Step 1 — Stage the cart
 
-Build in a staging directory, not in a user's live library. Choose the cart id, copy the original cart
-files into `<id>/` preserving filenames and case, and confirm the executable named in the autoexec exists.
-On Linux and macOS, DOSBox command lines and filenames are case-sensitive.
+Build in a staging directory, not in a user's live library. Copy the original cart files into it
+preserving filenames and case, and confirm the executable named in the autoexec exists. Do not spend time
+choosing an id: the staging folder name is discarded on import and the SHA-1 of the exported `.cart` file
+becomes the id. On Linux and macOS, DOSBox command lines and filenames are case-sensitive.
 
 ### Step 2 — Write `.retrium/metadata.json`
 
@@ -109,20 +112,28 @@ Fix every reported error; warnings need a deliberate decision.
 
 ### Step 6 — Export and hand off
 
-Create a `.cart` archive (zip format) whose **single top-level entry is the cart-id folder**. Retrium uses
-that folder name as the id; if the cart has multiple root entries, the archive file name (minus extension)
-becomes the id instead. Agents should hand the finished cart to the user for import through the app's
-**Add Carts** action rather than writing directly into `<library>/`.
+Create a `.cart` archive (zip format) with the cart contents at the **archive root** (`.retrium/` plus the
+game files), matching what Retrium's own Export produces — do not wrap everything in a container folder.
+On import Retrium computes the archive file's SHA-1, extracts the contents verbatim into
+`<library>/carts/<sha1>/`, and uses that SHA-1 as the cart id for states and summaries; folder and file
+names inside the archive never affect the id. The app's own Export defaults the filename to `<id>.cart`,
+so a previously imported cart exports as `<sha1>.cart`. Agents should hand the finished cart to the user
+for import through the app's **Add Carts** action rather than writing directly into `<library>/`.
+Re-importing a byte-identical archive is refused as a duplicate; rebuilding the zip changes its SHA-1 and
+creates a separate cart even when the game files are unchanged.
 
 ## Common pitfalls
 
 | Symptom | Likely cause |
 | --- | --- |
-| Display name is the folder name | `metadata.json` missing, invalid JSON, or `name` empty. |
+| Display name is a 40-char hex string | `metadata.json` missing, invalid JSON, or `name` empty — the fallback is the (SHA-1) folder name. |
 | No cover art | File not named exactly `cover.png`, not in `.retrium/`, or not a PNG. |
 | DOSBox prompt instead of the game | Wrong/missing autoexec launch line, wrong executable case, or mount target not the cart root. |
 | Saved game appears to vanish | `.retrium/` is excluded from state mirroring, or the game saves outside the cart directory. |
-| Imported id is unexpected | Cart had no single top-level folder, so the archive stem was used. |
+| "already in the library" on import | An archive with the identical SHA-1 was imported before; remove the existing cart first, or change the archive bytes so it is a distinct cart. |
+| metadata/cover not found after import | Archive wraps contents in a top-level folder; put `.retrium/` and game files at the zip root. |
+| Cart id is a 40-char hex string | Expected: the id is the archive file's SHA-1, not a folder or file name. |
+| Exported filename is a hex string | Expected: Export names the file `<cart-id>.cart`, and an imported cart's id is its SHA-1. Rename the file after export if a readable name is wanted — renaming does not change the SHA-1 or the id. |
 
 ## Resources
 

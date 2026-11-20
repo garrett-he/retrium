@@ -52,20 +52,22 @@ Retrium keeps everything inside the library folder you choose:
 ```text
 <library>/
 ├── carts/
-│   └── DOOM/
+│   └── <sha1>/                 # cart id = SHA-1 of the imported .cart file
 │       ├── DOOM.EXE
 │       └── .retrium/
 │           ├── metadata.json   # cart metadata
 │           ├── cover.png       # optional cover art
 │           └── dosbox.conf     # optional DOSBox configuration
 ├── states/
-│   └── DOOM/                   # files saved during play, restored on launch
+│   └── <sha1>/                 # files saved during play, restored on launch
 └── summaries/
-    └── DOOM.json               # last run, runs and elapsed time
+    └── <sha1>.json             # last run, runs and elapsed time
 ```
 
 A cart folder is called a **cart**. Exporting one writes a `<id>.cart` archive (zip format) that can be
-imported into any library; legacy `.zip`, `.tar.gz` and `.tgz` archives can still be imported.
+imported into any library; legacy `.zip`, `.tar.gz` and `.tgz` archives can still be imported. On import the
+archive contents are extracted into `carts/<sha1>/` and its SHA-1 becomes the cart id. Importing the same
+archive twice is refused with a duplicate-cart message rather than overwriting the existing cart.
 
 `metadata.json` is a plain JSON file, so libraries are easy to back up or edit by hand:
 

@@ -1,11 +1,12 @@
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use notify::Watcher;
 use serde::Serialize;
+use sha1::{Digest, Sha1};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
@@ -179,17 +180,19 @@ fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Derive a cart directory name from an archive file name.
-fn archive_stem(path: &Path) -> String {
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("cart");
-
-    for ext in [".tar.gz", ".tgz", ".cart", ".zip"] {
-        if let Some(stripped) = name.strip_suffix(ext) {
-            return stripped.to_string();
+/// Compute the lowercase hex SHA-1 digest of a file's contents.
+fn sha1_of_file(path: &Path) -> Result<String, String> {
+    let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut hasher = Sha1::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer).map_err(|e| e.to_string())?;
+        if read == 0 {
+            break;
         }
+        hasher.update(&buffer[..read]);
     }
-
-    path.file_stem().and_then(|s| s.to_str()).unwrap_or(name).to_string()
+    Ok(hex::encode(hasher.finalize()))
 }
 
 // ---------------------------------------------------------------------------
@@ -441,53 +444,23 @@ pub async fn archive_cart(cart: Cart, app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Extract an archive into `carts_dir` and return the resulting cart id.
+/// Extract an archive into `carts_dir/<sha1>` and return the SHA-1 as the cart id.
 ///
-/// When the archive contains exactly one top-level directory, that directory
-/// becomes the cart directory. Otherwise the archive file name is used.
+/// The archive's SHA-1 digest is the cart id and directory name. Import is refused
+/// when a cart with the same digest already exists, so nothing is overwritten.
 fn import_archive(archive: &Path, carts_dir: &Path) -> Result<String, String> {
-    let temp = std::env::temp_dir().join(format!(
-        "retrium-import-{}-{}",
-        std::process::id(),
-        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
-    ));
-    std::fs::create_dir_all(&temp).map_err(|e| e.to_string())?;
+    let id = sha1_of_file(archive)?;
+    let dest = carts_dir.join(&id);
 
-    let result = (|| {
-        extract_zip(archive, &temp)?;
+    if dest.exists() {
+        let name = archive.file_name().and_then(|n| n.to_str()).unwrap_or("cart");
+        return Err(format!(
+            "Cart '{name}' is already in the library (SHA-1 {id}). Import skipped to avoid a duplicate."
+        ));
+    }
 
-        let entries: Vec<PathBuf> = std::fs::read_dir(&temp)
-            .map_err(|e| e.to_string())?
-            .flatten()
-            .map(|entry| entry.path())
-            .collect();
-
-        let single_dir = match entries.as_slice() {
-            [entry] if entry.is_dir() => Some(entry.clone()),
-            _ => None,
-        };
-
-        let (id, source) = match &single_dir {
-            Some(dir) => {
-                let id = dir
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .map(str::to_string)
-                    .ok_or_else(|| "Invalid UTF-8 in archive folder name".to_string())?;
-                (id, dir.clone())
-            }
-            None => (archive_stem(archive), temp.clone()),
-        };
-
-        let dest = carts_dir.join(&id);
-        std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
-        copy_dir_contents(&source, &dest)?;
-
-        Ok(id)
-    })();
-
-    let _ = std::fs::remove_dir_all(&temp);
-    result
+    extract_zip(archive, &dest)?;
+    Ok(id)
 }
 
 /// Import carts chosen via an open dialog into the library.
@@ -793,44 +766,69 @@ mod tests {
     }
 
     #[test]
-    fn import_uses_single_top_level_folder_as_cart_dir() {
-        let root = scratch_dir("single-folder");
-        let source = root.join("A").join("B");
+    fn import_uses_sha1_as_cart_id_and_extracts_contents() {
+        let root = scratch_dir("sha1-id");
+        let source = root.join("B");
         std::fs::create_dir_all(&source).unwrap();
         std::fs::write(source.join("xxx.exe"), b"binary").unwrap();
 
         let archive = root.join("A.cart");
-        create_zip(&root.join("A"), &archive).unwrap();
+        create_zip(&source, &archive).unwrap();
+        let expected_sha1 = sha1_of_file(&archive).unwrap();
 
         let carts = root.join("carts");
         std::fs::create_dir_all(&carts).unwrap();
         let id = import_archive(&archive, &carts).unwrap();
 
-        assert_eq!(id, "B");
-        assert!(carts.join("B").join("xxx.exe").is_file());
-        assert!(!carts.join("A").exists());
+        assert_eq!(id, expected_sha1);
+        assert_eq!(id.len(), 40);
+        assert!(carts.join(&id).join("xxx.exe").is_file());
 
         std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
-    fn import_falls_back_to_archive_name_for_root_entries() {
-        let root = scratch_dir("root-entries");
-        let source = root.join("files");
+    fn import_preserves_single_top_level_folder_verbatim() {
+        let root = scratch_dir("verbatim");
+        let source = root.join("wrapper").join("inner");
         std::fs::create_dir_all(&source).unwrap();
         std::fs::write(source.join("xxx.exe"), b"binary").unwrap();
-        std::fs::write(source.join("readme.txt"), b"text").unwrap();
 
         let archive = root.join("Game.cart");
-        create_zip(&source, &archive).unwrap();
+        create_zip(&root.join("wrapper"), &archive).unwrap();
+        let id = sha1_of_file(&archive).unwrap();
 
         let carts = root.join("carts");
         std::fs::create_dir_all(&carts).unwrap();
-        let id = import_archive(&archive, &carts).unwrap();
+        let imported = import_archive(&archive, &carts).unwrap();
 
-        assert_eq!(id, "Game");
-        assert!(carts.join("Game").join("xxx.exe").is_file());
-        assert!(carts.join("Game").join("readme.txt").is_file());
+        assert_eq!(imported, id);
+        assert!(carts.join(&id).join("inner").join("xxx.exe").is_file());
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn import_refuses_duplicate_sha1_without_overwriting() {
+        let root = scratch_dir("duplicate");
+        let source = root.join("B");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::write(source.join("xxx.exe"), b"binary").unwrap();
+
+        let archive = root.join("A.cart");
+        create_zip(&source, &archive).unwrap();
+        let id = sha1_of_file(&archive).unwrap();
+
+        let carts = root.join("carts");
+        std::fs::create_dir_all(&carts).unwrap();
+        let marker = carts.join(&id).join("marker.txt");
+        std::fs::create_dir_all(carts.join(&id)).unwrap();
+        std::fs::write(&marker, b"original").unwrap();
+
+        let error = import_archive(&archive, &carts).unwrap_err();
+        assert!(error.contains("already in the library"), "{error}");
+        assert!(error.contains(&id));
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "original");
 
         std::fs::remove_dir_all(&root).unwrap();
     }
