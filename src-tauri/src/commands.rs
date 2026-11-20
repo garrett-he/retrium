@@ -611,3 +611,40 @@ pub fn record_run(app: &AppHandle, id: &str, seconds: i64) {
         db.set_summary(id, &summary)
     });
 }
+
+// ---------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn delete_cart(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    if is_running(&state, &id)? {
+        return Err(format!("cart is running: {id}"));
+    }
+    let session = session(&state)?;
+    with_db(&state, |db| {
+        library::remove(&session.layout, &id)?;
+        db.delete(&id)
+    })
+}
+
+/// Throw away the working copy and the save layer, then restore from the
+/// archive. `Config/launch.json` is kept.
+#[tauri::command]
+pub fn reset_cart(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    if is_running(&state, &id)? {
+        return Err(format!("cart is running: {id}"));
+    }
+    let session = session(&state)?;
+    library::reset(&session.layout, &id)
+}
+
+/// Re-extract the program but keep the saves.
+#[tauri::command]
+pub fn repair_cart(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    if is_running(&state, &id)? {
+        return Err(format!("cart is running: {id}"));
+    }
+    let session = session(&state)?;
+    library::repair(&session.layout, &id)
+}

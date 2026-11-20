@@ -423,6 +423,75 @@ pub fn collect_export_entries(layout: &Layout, id: &str) -> Result<Vec<(String, 
     Ok(picked.into_iter().collect())
 }
 
+/// Delete a cart completely: archive, install directory, index row (the caller
+/// removes the row).
+pub fn remove(layout: &Layout, id: &str) -> Result<(), String> {
+    let archive = layout.archive(id);
+    if archive.exists() {
+        std::fs::remove_file(&archive).map_err(|e| e.to_string())?;
+    }
+    let installed = layout.install_dir(id);
+    if installed.exists() {
+        std::fs::remove_dir_all(&installed).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Discard everything the player produced: the working copy and the save layer.
+/// `Config/launch.json` survives — it is configuration, not progress.
+pub fn reset(layout: &Layout, id: &str) -> Result<(), String> {
+    let archive = layout.archive(id);
+    if !archive.is_file() {
+        return Err(format!("archive is missing: {}", archive.display()));
+    }
+
+    let installed = layout.install_dir(id);
+    let program = installed.join("Program");
+    if program.exists() {
+        std::fs::remove_dir_all(&program).map_err(|e| e.to_string())?;
+    }
+    state::clear(&layout.state_dir(id))?;
+
+    let runtime = layout.runtime_dir(id);
+    let _ = std::fs::remove_file(runtime.join(state::BASELINE_FILE));
+    let _ = std::fs::remove_file(runtime.join(state::RUNNING_FILE));
+
+    extract_program(&archive, layout, id)?;
+    restore_missing_launch(&archive, layout, id)?;
+    Ok(())
+}
+
+/// Re-extract the program but keep the saves: the way out of a broken install.
+pub fn repair(layout: &Layout, id: &str) -> Result<(), String> {
+    let archive = layout.archive(id);
+    if !archive.is_file() {
+        return Err(format!("archive is missing: {}", archive.display()));
+    }
+
+    let installed = layout.install_dir(id);
+    for sub in ["Program", "Resources"] {
+        let path = installed.join(sub);
+        if path.exists() {
+            std::fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
+        }
+    }
+
+    extract_program(&archive, layout, id)?;
+    restore_missing_launch(&archive, layout, id)?;
+    state::apply(&layout.state_dir(id), &installed)?;
+    Ok(())
+}
+
+/// `launch.json` is usually kept through a reset, but a cart without one cannot
+/// start at all, so restore it when it is missing.
+fn restore_missing_launch(archive: &Path, layout: &Layout, id: &str) -> Result<(), String> {
+    let launch = layout.install_dir(id).join(LAUNCH_ENTRY);
+    if launch.is_file() {
+        return Ok(());
+    }
+    extract(archive, layout, id)
+}
+
 /// Rebuild `carts/<id>.cart` from the installed copy, returning the new hash.
 pub fn commit(
     layout: &Layout,
@@ -864,6 +933,83 @@ mod tests {
         .unwrap();
 
         assert_eq!(hash, before.hash);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn reset_clears_progress_but_keeps_the_edited_launch_json() {
+        let root = scratch("reset");
+        build_cart(&root, &[("Program/GAME.EXE", "original")]);
+        let layout = Layout::new(&root);
+
+        let launch = layout.install_dir(ID).join(LAUNCH_ENTRY);
+        std::fs::write(&launch, LAUNCH).unwrap();
+        write_at(layout.program_dir(ID).join("SAVE01.DAT"), "save");
+        write_at(layout.state_dir(ID).join("Program/SAVE01.DAT"), "save");
+        write_at(layout.state_dir(ID).join("Program/GAME.EXE"), "patched");
+        write_at(layout.program_dir(ID).join("GAME.EXE"), "patched");
+
+        reset(&layout, ID).unwrap();
+
+        assert!(!layout.state_dir(ID).exists());
+        assert!(!layout.program_dir(ID).join("SAVE01.DAT").exists());
+        assert_eq!(
+            std::fs::read_to_string(layout.program_dir(ID).join("GAME.EXE")).unwrap(),
+            "original",
+            "a reset restores the program from the archive"
+        );
+        assert!(launch.is_file(), "launch.json is configuration, not progress");
+        assert!(!layout.runtime_dir(ID).join(state::BASELINE_FILE).exists());
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn repair_keeps_the_saves() {
+        let root = scratch("repair");
+        build_cart(&root, &[("Program/GAME.EXE", "original")]);
+        let layout = Layout::new(&root);
+
+        write_at(layout.program_dir(ID).join("GAME.EXE"), "broken beyond repair");
+        write_at(layout.state_dir(ID).join("Program/SAVE01.DAT"), "precious");
+
+        repair(&layout, ID).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(layout.program_dir(ID).join("GAME.EXE")).unwrap(),
+            "original"
+        );
+        assert!(
+            layout.program_dir(ID).join("SAVE01.DAT").is_file(),
+            "the save layer is re-applied after a repair"
+        );
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn reset_restores_a_missing_launch_json() {
+        let root = scratch("reset-launch");
+        build_cart(&root, &[("Program/GAME.EXE", "x")]);
+        let layout = Layout::new(&root);
+
+        std::fs::remove_dir_all(layout.install_dir(ID).join("Config")).unwrap();
+        reset(&layout, ID).unwrap();
+        assert!(layout.install_dir(ID).join(LAUNCH_ENTRY).is_file());
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn remove_deletes_everything() {
+        let root = scratch("remove");
+        build_cart(&root, &[("Program/GAME.EXE", "x")]);
+        let layout = Layout::new(&root);
+
+        remove(&layout, ID).unwrap();
+        assert!(!layout.archive(ID).exists());
+        assert!(!layout.install_dir(ID).exists());
+
         std::fs::remove_dir_all(&root).unwrap();
     }
 
