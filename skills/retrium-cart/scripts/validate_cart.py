@@ -13,7 +13,9 @@ The checks mirror `src-tauri/src/library.rs` (layout, `hash`, safety limits),
 `src-tauri/src/launch.rs` (targets, profiles, referenced files). The hash
 algorithm is the same one `src-tauri/src/hash.rs` implements; the golden
 vectors in `design/fixtures/hash-vectors.json` are checked on every run so the
-two implementations cannot drift apart silently.
+two implementations cannot drift apart silently. A copy of that file ships
+next to this script (`../fixtures/hash-vectors.json`) so an installed skill can
+still check itself without a checkout of the repository.
 
 Exit status is 0 when no errors were found, 1 otherwise. Warnings do not affect
 the exit status but are printed for review.
@@ -136,12 +138,38 @@ def tree_hash(entries: list[tuple[str, bytes]]) -> str:
     return hasher.hexdigest()
 
 
+def vector_candidates() -> tuple[Path, Path]:
+    """Return (canonical, bundled) locations of the golden vectors.
+
+    Inside the repository the canonical file under `design/fixtures/` is what
+    `hash.rs` compiles in with `include_str!`; the copy under `fixtures/` exists
+    so that a skill installed on its own — with no surrounding checkout — can
+    still check itself.
+    """
+    here = Path(__file__).resolve()
+    canonical = here.parents[3] / "design" / "fixtures" / "hash-vectors.json"
+    bundled = here.parents[1] / "fixtures" / "hash-vectors.json"
+    return canonical, bundled
+
+
 def verify_hash_vectors(report: Report) -> None:
     """Fail loudly if this implementation and `hash.rs` disagree."""
-    fixtures = Path(__file__).resolve().parents[3] / "design" / "fixtures" / "hash-vectors.json"
+    canonical, bundled = vector_candidates()
+
+    fixtures = canonical if canonical.is_file() else bundled
     if not fixtures.is_file():
-        report.warn("hash-vectors", f"cannot find {fixtures}; skipping the self-check")
+        report.warn("hash-vectors", f"cannot find {canonical} or {bundled}; skipping the self-check")
         return
+    if canonical.is_file() and bundled.is_file():
+        try:
+            if canonical.read_bytes() != bundled.read_bytes():
+                report.warn(
+                    "hash-vectors",
+                    f"{bundled} differs from {canonical}; the packaged copy is stale",
+                )
+        except OSError as exc:
+            report.warn("hash-vectors", f"cannot compare the two vector files: {exc}")
+
     try:
         data = json.loads(fixtures.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:

@@ -176,3 +176,5 @@ as already imported; importing a higher `revision` of the same `id` is offered a
 - `references/dosbox-tuning.md` — choosing `machine`, `memsize`, `cycles`, `sound` and `extra`, and what the
   generated `dosbox.conf` looks like.
 - `assets/cart-template/` — `manifest.json` and `Config/launch.json` to copy and edit.
+- `fixtures/hash-vectors.json` — golden vectors the validator checks itself against on every run. The
+  repository's `design/fixtures/` copy is canonical; this one lets the skill work on its own.

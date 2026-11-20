@@ -13,3 +13,7 @@ Thumbs.db
 
 # workbuddy session data
 .workbuddy/
+
+# python
+__pycache__/
+*.pyc

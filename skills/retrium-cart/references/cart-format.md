@@ -10,7 +10,7 @@ The on-disk contract of cart format **version 1**, as implemented by the Rust ba
 | `Config/launch.json` and generated `dosbox.conf` | `src-tauri/src/launch.rs` |
 | import decisions | `src-tauri/src/import.rs` |
 
-The design rationale lives in `design/CART_FORMAT_V2.md`. This file is the checklist.
+The design rationale lives in `design/CART_FORMAT_V2.md` in the Retrium repository. This file is the checklist.
 
 ## Identity, revision, hash
 
@@ -113,7 +113,9 @@ hash                = sha256( concat( sort_bytewise( records ) ) )
   level yields the same hash; editing `manifest.json` (even only `revision` or `createdAt`) yields a new one.
 
 Cross-language agreement is locked by `design/fixtures/hash-vectors.json`, read by both
-`hash.rs` (tests) and `validate_cart.py` (every run).
+`hash.rs` (tests) and `validate_cart.py` (every run). The skill ships a copy at
+`fixtures/hash-vectors.json` so the validator keeps checking itself when installed on its own; the
+repository copy wins when both are present, and the validator warns if the two ever differ.
 
 ## `Config/launch.json`
 
