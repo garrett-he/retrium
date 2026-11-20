@@ -1,24 +1,44 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Cart, CartInfo, CartProcess, CartRunOptions, CartSummary, DosboxVersions, SetupState } from "@/types";
+import type {
+    Author,
+    Cart,
+    CartInfo,
+    CartProcess,
+    DosboxProbe,
+    ExportPreview,
+    ImportAction,
+    ImportReport,
+    LaunchInfo,
+    SetupState,
+} from "@/types";
 
 export const api = {
     discoverCarts: () => invoke<Cart[]>("discover_carts"),
-    addCarts: () => invoke<Cart[]>("add_carts"),
-    runCart: (options: CartRunOptions) => invoke<CartProcess>("run_cart", { options }),
-    stopCart: (cart: Cart) => invoke<void>("stop_cart", { cart }),
+    addCarts: () => invoke<ImportReport>("add_carts"),
+    resolveImport: (archive: string, action: ImportAction) => invoke<Cart>("resolve_import", { archive, action }),
+
+    getCartLaunch: (id: string) => invoke<LaunchInfo>("get_cart_launch", { id }),
+    runCart: (id: string, targetId?: string) => invoke<CartProcess>("run_cart", { id, targetId }),
+    stopCart: (id: string) => invoke<void>("stop_cart", { id }),
     stopAllCarts: () => invoke<number>("stop_all_carts"),
     listCartProcesses: () => invoke<CartProcess[]>("list_cart_processes"),
-    openCartFolder: (cart: Cart) => invoke<void>("open_cart_folder", { cart }),
-    deleteCart: (cart: Cart) => invoke<void>("delete_cart", { cart }),
-    archiveCart: (cart: Cart) => invoke<void>("archive_cart", { cart }),
-    updateCartInfo: (cart: Cart, info: CartInfo) => invoke<Cart>("update_cart_info", { cart, info }),
-    getCartProcess: (cart: Cart) => invoke<CartProcess | null>("get_cart_process", { cart }),
-    getCartSummary: (cart: Cart) => invoke<CartSummary | null>("get_cart_summary", { cart }),
-    getCartSummaries: () => invoke<Record<string, CartSummary>>("get_cart_summaries"),
-    getDosboxVersions: () => invoke<DosboxVersions>("get_dosbox_versions"),
-    addDosboxVersion: (name: string, path: string) => invoke<void>("add_dosbox_version", { name, path }),
-    removeDosboxVersion: (name: string) => invoke<void>("remove_dosbox_version", { name }),
-    setDefaultDosboxVersion: (name: string) => invoke<void>("set_default_dosbox_version", { name }),
+    getCartProcess: (id: string) => invoke<CartProcess | null>("get_cart_process", { id }),
+
+    openCartFolder: (id: string) => invoke<void>("open_cart_folder", { id }),
+    updateCartInfo: (id: string, info: CartInfo, author?: Author) =>
+        invoke<Cart>("update_cart_info", { id, info, author }),
+    deleteCart: (id: string) => invoke<void>("delete_cart", { id }),
+    resetCart: (id: string) => invoke<void>("reset_cart", { id }),
+    repairCart: (id: string) => invoke<void>("repair_cart", { id }),
+
+    previewExport: (id: string) => invoke<ExportPreview>("preview_export", { id }),
+    commitCart: (id: string, revision?: number) => invoke<Cart>("commit_cart", { id, revision }),
+    exportCartFile: (id: string) => invoke<string | null>("export_cart_file", { id }),
+
+    getDosboxPath: () => invoke<DosboxProbe>("get_dosbox_path"),
+    setDosboxPath: (path: string) => invoke<DosboxProbe>("set_dosbox_path", { path }),
+    probeDosboxPath: (path: string) => invoke<DosboxProbe>("probe_dosbox_path", { path }),
+
     getSetupState: () => invoke<SetupState>("get_setup_state"),
     completeSetup: (library: string, dosbox: string) => invoke<void>("complete_setup", { library, dosbox }),
     setLibraryDirectory: (library: string) => invoke<void>("set_library_directory", { library }),

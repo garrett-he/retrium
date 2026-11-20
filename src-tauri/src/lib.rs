@@ -8,33 +8,56 @@ pub mod library;
 pub mod manifest;
 pub mod state;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
-pub use config::DosboxVersion;
+use crate::db::Db;
+use crate::manifest::{Dos, ProgramBlock, Tool};
 
+pub const APP_NAME: &str = "Retrium";
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// `cart.tool`, describing whoever produced the current revision.
+pub fn current_tool() -> Tool {
+    Tool {
+        app: APP_NAME.to_string(),
+        version: APP_VERSION.to_string(),
+        host: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
+    }
+}
+
+/// A cart as the UI sees it: the manifest plus index-side facts (cover, dirty,
+/// run summary) that do not live in the archive.
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Cart {
-    /// Directory basename used as the unique identifier.
     pub id: String,
-    /// Absolute path to the cart directory.
-    pub dir: String,
+    pub revision: i64,
     pub info: CartInfo,
-    /// Absolute path to `cover.png` when present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<manifest::Author>,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cover: Option<String>,
+    /// `None` when it cannot be known (no commit cache, an export in progress).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dirty: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<CartSummary>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CartInfo {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub release: Option<i32>,
+    pub release: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -43,17 +66,63 @@ pub struct CartInfo {
     pub publisher: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub series: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub players: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dos: Option<Dos>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_ids: Option<BTreeMap<String, String>>,
 }
 
-/// A running DOSBox process tracked by Retrium.
+impl From<&ProgramBlock> for CartInfo {
+    fn from(program: &ProgramBlock) -> Self {
+        CartInfo {
+            name: program.name.clone(),
+            language: program.language.clone(),
+            release: program.release,
+            category: program.category.clone(),
+            developer: program.developer.clone(),
+            publisher: program.publisher.clone(),
+            series: program.series.clone(),
+            tags: program.tags.clone(),
+            players: program.players,
+            platform: program.platform.clone(),
+            dos: program.dos.clone(),
+            external_ids: program.external_ids.clone(),
+        }
+    }
+}
+
+impl From<&CartInfo> for ProgramBlock {
+    fn from(info: &CartInfo) -> Self {
+        ProgramBlock {
+            name: info.name.clone(),
+            language: info.language.clone(),
+            release: info.release,
+            category: info.category.clone(),
+            developer: info.developer.clone(),
+            publisher: info.publisher.clone(),
+            series: info.series.clone(),
+            tags: info.tags.clone(),
+            players: info.players,
+            platform: info.platform.clone(),
+            dos: info.dos.clone(),
+            external_ids: info.external_ids.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CartProcess {
     pub pid: u32,
-    pub cart: Cart,
-    pub dosbox_version: String,
+    pub cart_id: String,
+    pub target_id: String,
+    pub target_label: String,
     /// RFC 3339 timestamp of when the process was launched.
     pub started_at: String,
 }
@@ -61,32 +130,111 @@ pub struct CartProcess {
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CartSummary {
-    /// ISO 8601 (RFC 3339) date string of the last run.
+    /// RFC 3339 timestamp of the last run.
     pub last_run: String,
     pub runs: i64,
     /// Total elapsed time in seconds.
     pub elapsed: i64,
 }
 
+/// What the Run button needs: the targets the author declared, nothing else.
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchInfo {
+    pub targets: Vec<TargetInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_target: Option<String>,
+    /// Set when `launch.json` cannot be read. The button is disabled instead of
+    /// guessing a target.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
-pub struct CartRunOptions {
-    pub cart: Cart,
-    #[serde(rename = "dosboxVersion")]
-    pub dosbox_version: String,
+#[serde(rename_all = "camelCase")]
+pub struct TargetInfo {
+    pub id: String,
+    pub label: String,
+    pub executable: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImportAction {
+    /// Import a cart that is not in the library yet.
+    Keep,
+    /// Overwrite the local cart with the incoming one.
+    Replace,
+    Skip,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportReport {
+    pub imported: Vec<Cart>,
+    pub skipped: Vec<ImportNote>,
+    /// Items that need a human decision before anything touches the disk.
+    pub pending: Vec<PendingImport>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportNote {
+    pub archive: String,
+    pub id: String,
+    pub reason: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingImport {
+    pub archive: String,
+    pub id: String,
+    pub name: String,
+    pub decision: ImportDecision,
+    pub message: String,
+    pub existing_revision: Option<i64>,
+    pub incoming_revision: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImportDecision {
+    /// Same id, higher revision: offer an upgrade.
+    Upgrade,
+    /// Same id and revision but different content: refuse unless replaced.
+    Conflict,
+    /// Same id, lower revision: refuse unless explicitly downgraded.
+    Downgrade,
+    /// Same content under a different id.
+    Duplicate,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportPreview {
+    pub dirty: bool,
+    pub revision: i64,
+    pub next_revision: i64,
+    pub package_hash: String,
+    /// Hash of what the installed copy would produce right now.
+    pub current_hash: String,
 }
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DosboxVersions {
-    pub default: String,
-    pub versions: Vec<DosboxVersion>,
+pub struct SetupState {
+    pub configured: bool,
+    pub library: String,
+    pub dosbox: String,
 }
 
 /// A running DOSBox process tracked by Retrium.
 pub struct ProcessHandle {
     pub pid: u32,
-    pub cart: Cart,
-    pub dosbox_version: String,
+    pub cart_id: String,
+    pub target_id: String,
+    pub target_label: String,
     pub started_at: chrono::DateTime<chrono::Utc>,
     /// Sending a value kills the spawned process and ends the watcher task.
     pub kill_tx: tokio::sync::oneshot::Sender<()>,
@@ -94,9 +242,11 @@ pub struct ProcessHandle {
 
 pub struct AppState {
     pub config: Mutex<config::Config>,
-    /// Whether the config file existed and was valid at startup.
+    /// Whether a usable config file existed at startup.
     pub configured: AtomicBool,
     pub processes: Mutex<HashMap<String, ProcessHandle>>,
+    /// Opened lazily and dropped when the library changes.
+    pub db: Mutex<Option<Db>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -118,27 +268,20 @@ pub fn run() {
                 config: Mutex::new(config),
                 configured: AtomicBool::new(configured),
                 processes: Mutex::new(HashMap::new()),
+                db: Mutex::new(None),
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::discover_carts,
-            commands::run_cart,
-            commands::stop_cart,
             commands::stop_all_carts,
             commands::list_cart_processes,
-            commands::open_cart_folder,
-            commands::delete_cart,
-            commands::archive_cart,
-            commands::add_carts,
-            commands::update_cart_info,
             commands::get_cart_process,
-            commands::get_cart_summary,
-            commands::get_cart_summaries,
-            commands::get_dosbox_versions,
-            commands::add_dosbox_version,
-            commands::remove_dosbox_version,
-            commands::set_default_dosbox_version,
+            commands::open_cart_folder,
+            commands::update_cart_info,
+            commands::get_dosbox_path,
+            commands::set_dosbox_path,
+            commands::probe_dosbox_path,
             commands::get_setup_state,
             commands::complete_setup,
             commands::set_library_directory,

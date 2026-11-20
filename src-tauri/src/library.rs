@@ -432,25 +432,49 @@ pub fn commit(
     tool: &Tool,
     created_at: &str,
 ) -> Result<(Manifest, String), String> {
-    let mut updated = manifest.clone();
-    updated.cart.revision = revision;
-    updated.cart.tool = tool.clone();
-    updated.cart.created_at = created_at.to_string();
-
+    let updated = prepare_manifest(manifest, revision, tool, created_at);
     let collected = collect_export_entries(layout, id)?;
     // Manifest bytes must be final before the hash is computed, otherwise the
     // archive hash can never match its own content.
     let manifest_bytes = updated.to_json().into_bytes();
 
     let archive_path = layout.archive(id);
-    let package_hash = write_archive(&archive_path, &collected, &manifest_bytes)?;
+    let package_hash = build_archive(Some(&archive_path), &archive_path, &collected, &manifest_bytes)?;
     Ok((updated, package_hash))
 }
 
-/// Write a cart archive atomically. Entries are written in name order and no
-/// directory entries are emitted, so the packing tool cannot change the hash.
-fn write_archive(
-    destination: &Path,
+/// The hash `commit` would produce, without touching the archive. This is how
+/// "has anything changed since the last export?" is answered: same matrix, same
+/// hash function, no state flag.
+pub fn export_hash(
+    layout: &Layout,
+    id: &str,
+    manifest: &Manifest,
+    revision: i64,
+    tool: &Tool,
+    created_at: &str,
+) -> Result<String, String> {
+    let updated = prepare_manifest(manifest, revision, tool, created_at);
+    let collected = collect_export_entries(layout, id)?;
+    let manifest_bytes = updated.to_json().into_bytes();
+    let archive_path = layout.archive(id);
+    build_archive(None, &archive_path, &collected, &manifest_bytes)
+}
+
+fn prepare_manifest(manifest: &Manifest, revision: i64, tool: &Tool, created_at: &str) -> Manifest {
+    let mut updated = manifest.clone();
+    updated.cart.revision = revision;
+    updated.cart.tool = tool.clone();
+    updated.cart.created_at = created_at.to_string();
+    updated
+}
+
+/// Build a cart archive, or only compute its hash when `destination` is `None`.
+/// Entries are written in name order and no directory entries are emitted, so
+/// the packing tool cannot change the hash.
+fn build_archive(
+    destination: Option<&Path>,
+    archive_path: &Path,
     entries: &[(String, EntrySource)],
     manifest_bytes: &[u8],
 ) -> Result<String, String> {
@@ -458,7 +482,7 @@ fn write_archive(
         .iter()
         .map(|(name, source)| (name.as_str(), source.clone()))
         .collect();
-    all.push((MANIFEST_ENTRY, EntrySource::Archive)); // replaced below
+    all.push((MANIFEST_ENTRY, EntrySource::Archive)); // handled by name below
     all.sort_by(|a, b| a.0.cmp(b.0));
 
     let mut digests: Vec<EntryDigest> = Vec::with_capacity(all.len());
@@ -466,10 +490,14 @@ fn write_archive(
         if *name == MANIFEST_ENTRY {
             digests.push(EntryDigest::of_bytes(*name, manifest_bytes));
         } else {
-            digests.push(digest_of(name, source, destination)?);
+            digests.push(digest_of(name, source, archive_path)?);
         }
     }
     let package_hash = hash::tree_hash(digests);
+
+    let Some(destination) = destination else {
+        return Ok(package_hash);
+    };
 
     let temp = destination.with_extension("cart.tmp");
     {
@@ -495,6 +523,16 @@ fn write_archive(
 
     replace_file(&temp, destination)?;
     Ok(package_hash)
+}
+
+/// Write a cart archive in place; used by the tests to build fixtures.
+#[cfg(test)]
+fn write_archive(
+    destination: &Path,
+    entries: &[(String, EntrySource)],
+    manifest_bytes: &[u8],
+) -> Result<String, String> {
+    build_archive(Some(destination), destination, entries, manifest_bytes)
 }
 
 fn open_archive(path: &Path) -> Result<zip::ZipArchive<std::fs::File>, String> {

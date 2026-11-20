@@ -1,513 +1,180 @@
-use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
-use std::time::Duration;
+//! Tauri commands: orchestration only. Validation lives in `manifest`,
+//! `launch` and `library`; this layer resolves paths, talks to the database and
+//! turns errors into strings the UI can show.
 
-use notify::Watcher;
-use serde::Serialize;
-use sha1::{Digest, Sha1};
-use tauri::{AppHandle, Manager, State};
+use std::path::Path;
+use std::sync::atomic::Ordering;
+
+use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
-use crate::config::Config;
-use crate::{AppState, Cart, CartInfo, CartProcess, CartRunOptions, CartSummary, DosboxVersions, ProcessHandle};
+use crate::config::{self, Config};
+use crate::db::{Db, Summary};
+use crate::library::{self, Layout};
+use crate::{AppState, Cart, CartInfo, CartProcess, CartSummary, SetupState};
 
 // ---------------------------------------------------------------------------
-// Discovery helpers
+// Session helpers
 // ---------------------------------------------------------------------------
 
-fn discover_carts_inner(config: &Config) -> Vec<Cart> {
-    let carts_dir = PathBuf::from(&config.library).join("carts");
-    let mut carts = Vec::new();
-
-    let entries = match std::fs::read_dir(&carts_dir) {
-        Ok(entries) => entries,
-        Err(_) => return carts,
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-
-        let id = match path.file_name().and_then(|n| n.to_str()) {
-            Some(s) if !s.is_empty() => s.to_string(),
-            _ => continue,
-        };
-
-        let dir = path.to_string_lossy().to_string();
-        let info = load_cart_info(&path, &id);
-        let cover = {
-            let cover_path = path.join(".retrium").join("cover.png");
-            if cover_path.exists() {
-                Some(cover_path.to_string_lossy().to_string())
-            } else {
-                None
-            }
-        };
-
-        carts.push(Cart { id, dir, info, cover });
-    }
-
-    carts
+struct Session {
+    #[allow(dead_code)]
+    config: Config,
+    layout: Layout,
 }
 
-fn load_cart_info(cart_dir: &Path, fallback_name: &str) -> CartInfo {
-    let retrium_dir = cart_dir.join(".retrium");
+fn session(state: &State<'_, AppState>) -> Result<Session, String> {
+    let config = state.config.lock().map_err(|e| e.to_string())?.clone();
+    let layout = Layout::new(&config.library);
+    Ok(Session { config, layout })
+}
 
-    // Older Tauri builds wrote `info.json`; `metadata.json` is the canonical name.
-    for file in ["metadata.json", "info.json"] {
-        let info_path = retrium_dir.join(file);
-        if let Ok(content) = std::fs::read_to_string(&info_path) {
-            if let Ok(mut info) = serde_json::from_str::<CartInfo>(&content) {
-                if info.name.is_empty() {
-                    info.name = fallback_name.to_string();
-                }
-                return info;
-            }
+/// Open the index on demand and hand it to `f`. Reopened after a library change.
+fn with_db<T>(state: &State<'_, AppState>, f: impl FnOnce(&Db) -> Result<T, String>) -> Result<T, String> {
+    let library = state.config.lock().map_err(|e| e.to_string())?.library.clone();
+    std::fs::create_dir_all(&library).map_err(|e| e.to_string())?;
+
+    let mut guard = state.db.lock().map_err(|e| e.to_string())?;
+    if guard.is_none() {
+        *guard = Some(Db::open(Path::new(&library))?);
+    }
+    f(guard.as_ref().expect("database just opened"))
+}
+
+/// Keep `retrium.db` aligned with `carts/`: add rows for archives that appeared
+/// (manually copied in, or a rebuilt database) and drop rows for archives that
+/// are gone. Cheap: one directory listing plus one `SELECT id`.
+fn sync_index(layout: &Layout, db: &Db) -> Result<(), String> {
+    layout.ensure()?;
+    let archives = layout.archive_ids()?;
+    let rows = db.ids()?;
+
+    for id in archives.iter().filter(|id| !rows.contains(id)) {
+        if let Some(record) = library::load_record(layout, id)? {
+            db.upsert(&record)?;
         }
     }
-
-    CartInfo {
-        name: fallback_name.to_string(),
-        ..CartInfo::default()
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Summary helpers
-// ---------------------------------------------------------------------------
-
-fn summary_path(library: &str, cart_id: &str) -> PathBuf {
-    PathBuf::from(library).join("summaries").join(format!("{cart_id}.json"))
-}
-
-fn load_summary(path: &Path) -> Option<CartSummary> {
-    let content = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&content).ok()
-}
-
-fn save_summary(path: &Path, summary: &CartSummary) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let content = serde_json::to_string_pretty(summary).map_err(|e| e.to_string())?;
-    std::fs::write(path, content).map_err(|e| e.to_string())
-}
-
-// ---------------------------------------------------------------------------
-// File helpers
-// ---------------------------------------------------------------------------
-
-/// Recursively copy the contents of `src` into `dst`, preserving relative paths.
-fn copy_dir_contents(src: &Path, dst: &Path) -> Result<(), String> {
-    for entry in walkdir::WalkDir::new(src).into_iter().filter_map(|e| e.ok()) {
-        let path = entry.path();
-        let rel = path.strip_prefix(src).map_err(|e| e.to_string())?;
-        if rel.as_os_str().is_empty() {
-            continue;
-        }
-
-        let dest = dst.join(rel);
-        if entry.file_type().is_dir() {
-            std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
-        } else if entry.file_type().is_file() {
-            if let Some(parent) = dest.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            std::fs::copy(path, &dest).map_err(|e| e.to_string())?;
-        }
+    for id in rows.iter().filter(|id| !archives.contains(id)) {
+        db.delete(id)?;
     }
     Ok(())
 }
 
-/// Create a cart (zip-format archive) of `src_dir` at `dest`.
-fn create_zip(src_dir: &Path, dest: &Path) -> Result<(), String> {
-    let file = std::fs::File::create(dest).map_err(|e| e.to_string())?;
-    let mut zip = zip::ZipWriter::new(file);
-    let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+fn to_cart(record: &crate::db::CartRecord, layout: &Layout, summary: Option<Summary>) -> Cart {
+    let id = &record.manifest.cart.id;
+    let cover = layout.install_dir(id).join("Resources/cover.png");
+    let has_cover = cover.is_file();
 
-    for entry in walkdir::WalkDir::new(src_dir).into_iter().filter_map(|e| e.ok()) {
-        let path = entry.path();
-        let rel = path.strip_prefix(src_dir).map_err(|e| e.to_string())?;
-        if rel.as_os_str().is_empty() {
-            continue;
-        }
-
-        let name = rel.to_str().ok_or_else(|| "Invalid UTF-8 in path".to_string())?;
-
-        if entry.file_type().is_dir() {
-            zip.add_directory(name, options).map_err(|e| e.to_string())?;
-        } else if entry.file_type().is_file() {
-            zip.start_file(name, options).map_err(|e| e.to_string())?;
-            let mut f = std::fs::File::open(path).map_err(|e| e.to_string())?;
-            std::io::copy(&mut f, &mut zip).map_err(|e| e.to_string())?;
-        }
+    Cart {
+        id: id.clone(),
+        revision: record.manifest.cart.revision,
+        info: CartInfo::from(&record.manifest.program),
+        author: record.manifest.cart.author.clone(),
+        created_at: record.manifest.cart.created_at.clone(),
+        cover: has_cover.then(|| cover.to_string_lossy().to_string()),
+        dirty: library::read_commit(layout, id).map(|commit| commit.package_hash != record.package_hash),
+        summary: summary.map(|s| CartSummary {
+            last_run: s.last_run,
+            runs: s.runs,
+            elapsed: s.elapsed,
+        }),
     }
-
-    let mut file = zip.finish().map_err(|e| e.to_string())?;
-    file.flush().map_err(|e| e.to_string())?;
-    Ok(())
 }
 
-/// Extract a cart at `zip_path` into `dest_dir`.
-fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), String> {
-    let file = std::fs::File::open(zip_path).map_err(|e| e.to_string())?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(dest_dir).map_err(|e| e.to_string())?;
-
-    for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        let outpath = match entry.enclosed_name() {
-            Some(p) => dest_dir.join(p),
-            None => continue,
-        };
-
-        if entry.is_dir() {
-            std::fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
-        } else {
-            if let Some(parent) = outpath.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            let mut outfile = std::fs::File::create(&outpath).map_err(|e| e.to_string())?;
-            std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
-        }
-    }
-
-    Ok(())
+#[allow(dead_code)]
+fn is_running(state: &State<'_, AppState>, id: &str) -> Result<bool, String> {
+    Ok(state.processes.lock().map_err(|e| e.to_string())?.contains_key(id))
 }
 
-/// Compute the lowercase hex SHA-1 digest of a file's contents.
-fn sha1_of_file(path: &Path) -> Result<String, String> {
-    let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
-    let mut hasher = Sha1::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let read = file.read(&mut buffer).map_err(|e| e.to_string())?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-    }
-    Ok(hex::encode(hasher.finalize()))
+fn running_process(state: &State<'_, AppState>, id: &str) -> Result<Option<CartProcess>, String> {
+    Ok(state
+        .processes
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get(id)
+        .map(|handle| CartProcess {
+            pid: handle.pid,
+            cart_id: handle.cart_id.clone(),
+            target_id: handle.target_id.clone(),
+            target_label: handle.target_label.clone(),
+            started_at: handle.started_at.to_rfc3339(),
+        }))
 }
 
 // ---------------------------------------------------------------------------
-// File watcher
+// Library
 // ---------------------------------------------------------------------------
 
-/// Watch `cart_dir` for created/modified files and mirror them into `states_dir`,
-/// skipping the `.retrium` metadata folder. Runs until `stop_rx` receives a signal.
-fn run_watcher(cart_dir: PathBuf, states_dir: PathBuf, stop_rx: std::sync::mpsc::Receiver<()>) {
-    let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
-
-    let watcher = match notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        let _ = tx.send(res);
-    }) {
-        Ok(mut watcher) => {
-            if let Err(e) = watcher.watch(&cart_dir, notify::RecursiveMode::Recursive) {
-                eprintln!("retrium: watch error: {e}");
-            }
-            watcher
-        }
-        Err(e) => {
-            eprintln!("retrium: watcher init error: {e}");
-            return;
-        }
-    };
-
-    loop {
-        match rx.recv_timeout(Duration::from_millis(250)) {
-            Ok(Ok(event)) => {
-                if matches!(event.kind, notify::EventKind::Create(_) | notify::EventKind::Modify(_)) {
-                    for path in &event.paths {
-                        if !path.is_file() {
-                            continue;
-                        }
-                        let rel = match path.strip_prefix(&cart_dir) {
-                            Ok(rel) => rel,
-                            Err(_) => continue,
-                        };
-                        if rel
-                            .components()
-                            .any(|c| c.as_os_str() == std::ffi::OsStr::new(".retrium"))
-                        {
-                            continue;
-                        }
-                        let dest = states_dir.join(rel);
-                        if let Some(parent) = dest.parent() {
-                            let _ = std::fs::create_dir_all(parent);
-                        }
-                        let _ = std::fs::copy(path, &dest);
-                    }
-                }
-            }
-            Ok(Err(e)) => {
-                eprintln!("retrium: watch event error: {e}");
-            }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                if stop_rx.try_recv().is_ok() {
-                    break;
-                }
-            }
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-        }
-    }
-
-    drop(watcher);
-}
-
-// ---------------------------------------------------------------------------
-// Commands
-// ---------------------------------------------------------------------------
-
-/// List all carts found under `{library}/carts`.
+/// Every cart in the library, read from the index.
 #[tauri::command]
 pub fn discover_carts(state: State<'_, AppState>) -> Result<Vec<Cart>, String> {
-    let config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    Ok(discover_carts_inner(&config))
-}
-
-/// Launch a cart in DOSBox, restoring saved states and tracking the process.
-#[tauri::command]
-pub async fn run_cart(
-    options: CartRunOptions,
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<CartProcess, String> {
-    let cart = options.cart.clone();
-    let cart_id = cart.id.clone();
-
-    // Refuse to launch a cart that is already running.
-    {
-        let processes = state.processes.lock().map_err(|e| e.to_string())?;
-        if processes.contains_key(&cart_id) {
-            return Err(format!("Cart '{cart_id}' is already running"));
+    let session = session(&state)?;
+    with_db(&state, |db| {
+        sync_index(&session.layout, db)?;
+        let records = db.list()?;
+        let mut carts = Vec::with_capacity(records.len());
+        for record in records {
+            let summary = db.get_summary(&record.manifest.cart.id)?;
+            carts.push(to_cart(&record, &session.layout, summary));
         }
-    }
-
-    let config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    let library = config.library.clone();
-    let cart_dir = PathBuf::from(&cart.dir);
-
-    // Restore previously saved states into the cart directory.
-    let states_dir = PathBuf::from(&library).join("states").join(&cart_id);
-    if states_dir.exists() {
-        copy_dir_contents(&states_dir, &cart_dir)?;
-    }
-
-    // Resolve the DOSBox executable for the requested version.
-    let requested = options.dosbox_version.as_str();
-    let resolved = config
-        .version(requested)
-        .or_else(|| config.default_version())
-        .ok_or_else(|| "No DOSBox version configured".to_string())?;
-    let dosbox_path = resolved.path.clone();
-    let dosbox_name = resolved.name.clone();
-
-    let conf_path = cart_dir.join(".retrium").join("dosbox.conf");
-    let mut cmd = tokio::process::Command::new(&dosbox_path);
-    cmd.current_dir(&cart_dir);
-    if conf_path.exists() {
-        cmd.arg("-conf").arg(&conf_path);
-    }
-
-    let child = cmd.spawn().map_err(|e| e.to_string())?;
-    let pid = child.id().ok_or_else(|| "Failed to get process id".to_string())?;
-    let started_at = chrono::Utc::now();
-
-    let (kill_tx, kill_rx) = tokio::sync::oneshot::channel::<()>();
-
-    {
-        let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
-        processes.insert(
-            cart_id.clone(),
-            ProcessHandle {
-                pid,
-                cart: cart.clone(),
-                dosbox_version: dosbox_name.clone(),
-                started_at,
-                kill_tx,
-            },
-        );
-    }
-
-    let app_clone = app.clone();
-    let cart_id_for_task = cart_id.clone();
-    let library_for_task = library.clone();
-    let cart_dir_for_task = cart_dir.clone();
-    let states_dir_for_task = PathBuf::from(&library_for_task).join("states").join(&cart_id_for_task);
-
-    tokio::spawn(async move {
-        let mut child = child;
-        let start = std::time::Instant::now();
-
-        let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
-        let watcher_task = tokio::task::spawn_blocking(move || {
-            run_watcher(cart_dir_for_task, states_dir_for_task, stop_rx);
-        });
-
-        // Wait for the process to exit, or kill it when requested.
-        let _exit_status = tokio::select! {
-            result = child.wait() => result,
-            _ = kill_rx => {
-                let _ = child.kill().await;
-                child.wait().await
-            }
-        };
-
-        // Stop the file watcher before updating the summary.
-        let _ = stop_tx.send(());
-        let _ = watcher_task.await;
-
-        let elapsed = start.elapsed().as_secs() as i64;
-
-        let path = summary_path(&library_for_task, &cart_id_for_task);
-        let mut summary = load_summary(&path).unwrap_or_default();
-        summary.runs += 1;
-        summary.elapsed += elapsed;
-        summary.last_run = chrono::Utc::now().to_rfc3339();
-        if let Err(e) = save_summary(&path, &summary) {
-            eprintln!("retrium: failed to save summary: {e}");
-        }
-
-        if let Some(app_state) = app_clone.try_state::<AppState>() {
-            if let Ok(mut processes) = app_state.processes.lock() {
-                processes.remove(&cart_id_for_task);
-            }
-        }
-    });
-
-    Ok(CartProcess {
-        pid,
-        cart,
-        dosbox_version: dosbox_name,
-        started_at: started_at.to_rfc3339(),
+        Ok(carts)
     })
 }
 
-/// Stop a running cart by signalling its DOSBox process to be killed.
+/// Open `installed/<id>/` in the system file manager.
 #[tauri::command]
-pub fn stop_cart(cart: Cart, state: State<'_, AppState>) -> Result<(), String> {
-    let handle = {
-        let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
-        processes.remove(&cart.id)
-    };
-
-    match handle {
-        Some(handle) => {
-            let _ = handle.kill_tx.send(());
-            Ok(())
-        }
-        None => Err(format!("Cart '{}' is not running", cart.id)),
+pub fn open_cart_folder(id: String, app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let session = session(&state)?;
+    let path = session.layout.install_dir(&id);
+    if !path.is_dir() {
+        return Err(format!("cart is not installed: {id}"));
     }
-}
-
-/// Open the cart directory in the system file manager.
-#[tauri::command]
-pub fn open_cart_folder(cart: Cart, app: AppHandle) -> Result<(), String> {
     app.opener()
-        .open_path(cart.dir.clone(), None::<&str>)
+        .open_path(path.to_string_lossy().to_string(), None::<&str>)
         .map_err(|e| e.to_string())
 }
 
-/// Permanently delete a cart directory from disk.
+/// Persist edited metadata. Only the index changes; the archive keeps its hash
+/// until the next export, so the cart is reported as dirty in the meantime.
 #[tauri::command]
-pub fn delete_cart(cart: Cart) -> Result<(), String> {
-    let path = PathBuf::from(&cart.dir);
-    if path.exists() {
-        std::fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
+pub fn update_cart_info(
+    id: String,
+    info: CartInfo,
+    author: Option<crate::manifest::Author>,
+    state: State<'_, AppState>,
+) -> Result<Cart, String> {
+    if info.name.trim().is_empty() {
+        return Err("Cart name is required".to_string());
     }
-    Ok(())
-}
-
-/// Export a cart directory as a .cart archive chosen via a save dialog.
-#[tauri::command]
-pub async fn archive_cart(cart: Cart, app: AppHandle) -> Result<(), String> {
-    let file_path = app
-        .dialog()
-        .file()
-        .add_filter("Retrium Carts", &["cart"])
-        .add_filter("All Files", &["*"])
-        .set_file_name(format!("{}.cart", cart.id))
-        .blocking_save_file();
-
-    let dest = match file_path {
-        Some(path) => path.into_path().map_err(|e| e.to_string())?,
-        None => return Ok(()),
-    };
-
-    create_zip(&PathBuf::from(&cart.dir), &dest)?;
-    Ok(())
-}
-
-/// Extract an archive into `carts_dir/<sha1>` and return the SHA-1 as the cart id.
-///
-/// The archive's SHA-1 digest is the cart id and directory name. Import is refused
-/// when a cart with the same digest already exists, so nothing is overwritten.
-fn import_archive(archive: &Path, carts_dir: &Path) -> Result<String, String> {
-    let id = sha1_of_file(archive)?;
-    let dest = carts_dir.join(&id);
-
-    if dest.exists() {
-        let name = archive.file_name().and_then(|n| n.to_str()).unwrap_or("cart");
-        return Err(format!(
-            "Cart '{name}' is already in the library (SHA-1 {id}). Import skipped to avoid a duplicate."
-        ));
+    if let Some(author) = &author {
+        if author.name.trim().is_empty() {
+            return Err("Author name must not be empty".to_string());
+        }
     }
 
-    extract_zip(archive, &dest)?;
-    Ok(id)
+    let session = session(&state)?;
+    with_db(&state, |db| {
+        let mut record = db.get(&id)?.ok_or_else(|| format!("cart not found: {id}"))?;
+
+        record.manifest.program = crate::manifest::ProgramBlock::from(&info);
+        record.manifest.cart.author = author;
+        db.upsert(&record)?;
+
+        let summary = db.get_summary(&id)?;
+        Ok(to_cart(&record, &session.layout, summary))
+    })
 }
 
-/// Import carts chosen via an open dialog into the library.
+// ---------------------------------------------------------------------------
+// Processes
+// ---------------------------------------------------------------------------
+
 #[tauri::command]
-pub async fn add_carts(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<Cart>, String> {
-    let files = app
-        .dialog()
-        .file()
-        .add_filter("Retrium Carts", &["cart"])
-        .add_filter("Legacy Archives", &["zip", "tar.gz", "tgz"])
-        .add_filter("All Files", &["*"])
-        .blocking_pick_files();
-
-    let files = match files {
-        Some(files) => files,
-        None => return Ok(Vec::new()),
-    };
-
-    let config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    let carts_dir = PathBuf::from(&config.library).join("carts");
-    std::fs::create_dir_all(&carts_dir).map_err(|e| e.to_string())?;
-
-    let mut new_ids = Vec::new();
-    for file in files {
-        let path = file.into_path().map_err(|e| e.to_string())?;
-        new_ids.push(import_archive(&path, &carts_dir)?);
-    }
-
-    let carts = discover_carts_inner(&config);
-    let result = carts.into_iter().filter(|p| new_ids.contains(&p.id)).collect();
-
-    Ok(result)
+pub fn get_cart_process(id: String, state: State<'_, AppState>) -> Result<Option<CartProcess>, String> {
+    running_process(&state, &id)
 }
 
-/// Return the running process for a cart, if any.
-#[tauri::command]
-pub fn get_cart_process(cart: Cart, state: State<'_, AppState>) -> Result<Option<CartProcess>, String> {
-    let processes = state.processes.lock().map_err(|e| e.to_string())?;
-    Ok(processes.get(&cart.id).map(|handle| CartProcess {
-        pid: handle.pid,
-        cart: handle.cart.clone(),
-        dosbox_version: handle.dosbox_version.clone(),
-        started_at: handle.started_at.to_rfc3339(),
-    }))
-}
-
-/// List every currently running DOSBox process.
 #[tauri::command]
 pub fn list_cart_processes(state: State<'_, AppState>) -> Result<Vec<CartProcess>, String> {
     let processes = state.processes.lock().map_err(|e| e.to_string())?;
@@ -515,14 +182,14 @@ pub fn list_cart_processes(state: State<'_, AppState>) -> Result<Vec<CartProcess
         .values()
         .map(|handle| CartProcess {
             pid: handle.pid,
-            cart: handle.cart.clone(),
-            dosbox_version: handle.dosbox_version.clone(),
+            cart_id: handle.cart_id.clone(),
+            target_id: handle.target_id.clone(),
+            target_label: handle.target_label.clone(),
             started_at: handle.started_at.to_rfc3339(),
         })
         .collect())
 }
 
-/// Stop every running DOSBox process, returning how many were stopped.
 #[tauri::command]
 pub fn stop_all_carts(state: State<'_, AppState>) -> Result<usize, String> {
     let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
@@ -533,150 +200,76 @@ pub fn stop_all_carts(state: State<'_, AppState>) -> Result<usize, String> {
     Ok(stopped)
 }
 
-/// Persist edited cart metadata to `.retrium/metadata.json` on disk.
-#[tauri::command]
-pub fn update_cart_info(cart: Cart, info: CartInfo) -> Result<Cart, String> {
-    if info.name.trim().is_empty() {
-        return Err("Cart name is required".to_string());
-    }
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
 
-    let dir = PathBuf::from(&cart.dir);
-    let retrium_dir = dir.join(".retrium");
-    std::fs::create_dir_all(&retrium_dir).map_err(|e| e.to_string())?;
-    let content = serde_json::to_string_pretty(&info).map_err(|e| e.to_string())?;
-    std::fs::write(retrium_dir.join("metadata.json"), content).map_err(|e| e.to_string())?;
-
-    Ok(Cart { info, ..cart })
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DosboxProbe {
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    pub exists: bool,
 }
 
-/// Return the run summary for a cart, if any.
 #[tauri::command]
-pub fn get_cart_summary(cart: Cart, state: State<'_, AppState>) -> Result<Option<CartSummary>, String> {
-    let config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    let path = summary_path(&config.library, &cart.id);
-    Ok(load_summary(&path))
-}
-
-/// Return run summaries for every cart that has one, keyed by cart id.
-#[tauri::command]
-pub fn get_cart_summaries(state: State<'_, AppState>) -> Result<HashMap<String, CartSummary>, String> {
-    let config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    let dir = PathBuf::from(&config.library).join("summaries");
-    let mut summaries = HashMap::new();
-
-    if let Ok(entries) = std::fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                continue;
-            }
-            if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
-                if let Some(summary) = load_summary(&path) {
-                    summaries.insert(id.to_string(), summary);
-                }
-            }
-        }
-    }
-
-    Ok(summaries)
-}
-
-/// Return the configured DOSBox versions together with the default one.
-#[tauri::command]
-pub fn get_dosbox_versions(state: State<'_, AppState>) -> Result<DosboxVersions, String> {
-    let config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    Ok(DosboxVersions {
-        default: config.dosbox.default.clone(),
-        versions: config.dosbox.versions.clone(),
+pub fn get_dosbox_path(state: State<'_, AppState>) -> Result<DosboxProbe, String> {
+    let path = state.config.lock().map_err(|e| e.to_string())?.dosbox.path.clone();
+    let file = Path::new(&path);
+    Ok(DosboxProbe {
+        exists: file.is_file(),
+        version: config::probe_version(file),
+        path,
     })
 }
 
-/// Add a DOSBox executable to the configured versions.
+/// Store the single DOSBox path. Returns the detected version, if any.
 #[tauri::command]
-pub fn add_dosbox_version(name: String, path: String, state: State<'_, AppState>) -> Result<(), String> {
-    let name = name.trim().to_string();
+pub fn set_dosbox_path(path: String, state: State<'_, AppState>) -> Result<DosboxProbe, String> {
     let path = path.trim().to_string();
-
-    if name.is_empty() {
-        return Err("Version name is required".to_string());
-    }
     if path.is_empty() {
         return Err("DOSBox executable path is required".to_string());
     }
-    if !Path::new(&path).is_file() {
+    let file = Path::new(&path);
+    if !file.is_file() {
         return Err(format!("DOSBox executable not found: {path}"));
     }
 
+    let version = config::probe_version(file);
     let mut config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    if config.version(&name).is_some() {
-        return Err(format!("DOSBox version '{name}' already exists"));
-    }
-
-    config.dosbox.versions.push(crate::DosboxVersion { name, path });
+    config.dosbox.path = path.clone();
     config.save()?;
     *state.config.lock().map_err(|e| e.to_string())? = config;
-    Ok(())
-}
 
-/// Remove a non-default DOSBox version from the configuration.
-#[tauri::command]
-pub fn remove_dosbox_version(name: String, state: State<'_, AppState>) -> Result<(), String> {
-    let mut config = state.config.lock().map_err(|e| e.to_string())?.clone();
-
-    if config.dosbox.default == name {
-        return Err("Cannot remove the default DOSBox version".to_string());
-    }
-    let before = config.dosbox.versions.len();
-    config.dosbox.versions.retain(|v| v.name != name);
-    if config.dosbox.versions.len() == before {
-        return Err(format!("DOSBox version '{name}' not found"));
-    }
-
-    config.save()?;
-    *state.config.lock().map_err(|e| e.to_string())? = config;
-    Ok(())
-}
-
-/// Set which configured DOSBox version the main Run button uses.
-#[tauri::command]
-pub fn set_default_dosbox_version(name: String, state: State<'_, AppState>) -> Result<(), String> {
-    let mut config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    if config.version(&name).is_none() {
-        return Err(format!("DOSBox version '{name}' not found"));
-    }
-
-    config.dosbox.default = name;
-    config.save()?;
-    *state.config.lock().map_err(|e| e.to_string())? = config;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Setup helpers
-// ---------------------------------------------------------------------------
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SetupState {
-    pub configured: bool,
-    pub library: String,
-    pub dosbox: String,
-}
-
-/// Return whether the app is configured, plus the values to prefill on first run.
-#[tauri::command]
-pub fn get_setup_state(state: State<'_, AppState>) -> Result<SetupState, String> {
-    let config = state.config.lock().map_err(|e| e.to_string())?;
-    let dosbox = config.default_version().map(|v| v.path.clone()).unwrap_or_default();
-
-    Ok(SetupState {
-        configured: state.configured.load(Ordering::SeqCst),
-        library: config.library.clone(),
-        dosbox,
+    Ok(DosboxProbe {
+        path,
+        version,
+        exists: true,
     })
 }
 
-/// Persist the first-run configuration and mark the app as configured.
+/// Probe a path without saving it, so the settings page can preview the result.
+#[tauri::command]
+pub fn probe_dosbox_path(path: String) -> Result<DosboxProbe, String> {
+    let file = Path::new(&path);
+    Ok(DosboxProbe {
+        exists: file.is_file(),
+        version: config::probe_version(file),
+        path,
+    })
+}
+
+#[tauri::command]
+pub fn get_setup_state(state: State<'_, AppState>) -> Result<SetupState, String> {
+    let config = state.config.lock().map_err(|e| e.to_string())?;
+    Ok(SetupState {
+        configured: state.configured.load(Ordering::SeqCst),
+        library: config.library.clone(),
+        dosbox: config.dosbox.path.clone(),
+    })
+}
+
 #[tauri::command]
 pub fn complete_setup(library: String, dosbox: String, state: State<'_, AppState>) -> Result<(), String> {
     let library = library.trim().to_string();
@@ -685,50 +278,40 @@ pub fn complete_setup(library: String, dosbox: String, state: State<'_, AppState
     if library.is_empty() {
         return Err("Library directory is required".to_string());
     }
-    if dosbox.is_empty() {
-        return Err("DOSBox executable is required".to_string());
-    }
     if !Path::new(&dosbox).is_file() {
         return Err(format!("DOSBox executable not found: {dosbox}"));
     }
-
     std::fs::create_dir_all(&library).map_err(|e| format!("Failed to create library directory: {e}"))?;
 
     let config = Config {
-        library,
-        dosbox: crate::config::DosboxConfig {
-            default: "DOSBox".to_string(),
-            versions: vec![crate::DosboxVersion {
-                name: "DOSBox".to_string(),
-                path: dosbox,
-            }],
-        },
+        library: library.clone(),
+        dosbox: config::DosboxConfig { path: dosbox },
     };
     config.save()?;
 
     *state.config.lock().map_err(|e| e.to_string())? = config;
+    *state.db.lock().map_err(|e| e.to_string())? = None;
     state.configured.store(true, Ordering::SeqCst);
     Ok(())
 }
 
-/// Change the library directory after the initial setup.
 #[tauri::command]
 pub fn set_library_directory(library: String, state: State<'_, AppState>) -> Result<(), String> {
     let library = library.trim().to_string();
     if library.is_empty() {
         return Err("Library directory is required".to_string());
     }
-
     std::fs::create_dir_all(&library).map_err(|e| format!("Failed to create library directory: {e}"))?;
 
     let mut config = state.config.lock().map_err(|e| e.to_string())?.clone();
-    config.library = library.clone();
+    config.library = library;
     config.save()?;
     *state.config.lock().map_err(|e| e.to_string())? = config;
+    // The index belongs to the old library.
+    *state.db.lock().map_err(|e| e.to_string())? = None;
     Ok(())
 }
 
-/// Pick the library directory with the native folder dialog.
 #[tauri::command]
 pub async fn pick_library_directory(app: AppHandle) -> Result<Option<String>, String> {
     Ok(app
@@ -739,7 +322,6 @@ pub async fn pick_library_directory(app: AppHandle) -> Result<Option<String>, St
         .map(|path| path.to_string_lossy().to_string()))
 }
 
-/// Pick the DOSBox executable with the native file dialog.
 #[tauri::command]
 pub async fn pick_dosbox_executable(app: AppHandle) -> Result<Option<String>, String> {
     let dialog = app.dialog().file();
@@ -749,133 +331,4 @@ pub async fn pick_dosbox_executable(app: AppHandle) -> Result<Option<String>, St
         .blocking_pick_file()
         .and_then(|path| path.into_path().ok())
         .map(|path| path.to_string_lossy().to_string()))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn scratch_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "retrium-test-{tag}-{}-{}",
-            std::process::id(),
-            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    #[test]
-    fn import_uses_sha1_as_cart_id_and_extracts_contents() {
-        let root = scratch_dir("sha1-id");
-        let source = root.join("B");
-        std::fs::create_dir_all(&source).unwrap();
-        std::fs::write(source.join("xxx.exe"), b"binary").unwrap();
-
-        let archive = root.join("A.cart");
-        create_zip(&source, &archive).unwrap();
-        let expected_sha1 = sha1_of_file(&archive).unwrap();
-
-        let carts = root.join("carts");
-        std::fs::create_dir_all(&carts).unwrap();
-        let id = import_archive(&archive, &carts).unwrap();
-
-        assert_eq!(id, expected_sha1);
-        assert_eq!(id.len(), 40);
-        assert!(carts.join(&id).join("xxx.exe").is_file());
-
-        std::fs::remove_dir_all(&root).unwrap();
-    }
-
-    #[test]
-    fn import_preserves_single_top_level_folder_verbatim() {
-        let root = scratch_dir("verbatim");
-        let source = root.join("wrapper").join("inner");
-        std::fs::create_dir_all(&source).unwrap();
-        std::fs::write(source.join("xxx.exe"), b"binary").unwrap();
-
-        let archive = root.join("Game.cart");
-        create_zip(&root.join("wrapper"), &archive).unwrap();
-        let id = sha1_of_file(&archive).unwrap();
-
-        let carts = root.join("carts");
-        std::fs::create_dir_all(&carts).unwrap();
-        let imported = import_archive(&archive, &carts).unwrap();
-
-        assert_eq!(imported, id);
-        assert!(carts.join(&id).join("inner").join("xxx.exe").is_file());
-
-        std::fs::remove_dir_all(&root).unwrap();
-    }
-
-    #[test]
-    fn import_refuses_duplicate_sha1_without_overwriting() {
-        let root = scratch_dir("duplicate");
-        let source = root.join("B");
-        std::fs::create_dir_all(&source).unwrap();
-        std::fs::write(source.join("xxx.exe"), b"binary").unwrap();
-
-        let archive = root.join("A.cart");
-        create_zip(&source, &archive).unwrap();
-        let id = sha1_of_file(&archive).unwrap();
-
-        let carts = root.join("carts");
-        std::fs::create_dir_all(&carts).unwrap();
-        let marker = carts.join(&id).join("marker.txt");
-        std::fs::create_dir_all(carts.join(&id)).unwrap();
-        std::fs::write(&marker, b"original").unwrap();
-
-        let error = import_archive(&archive, &carts).unwrap_err();
-        assert!(error.contains("already in the library"), "{error}");
-        assert!(error.contains(&id));
-        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "original");
-
-        std::fs::remove_dir_all(&root).unwrap();
-    }
-
-    #[test]
-    fn loads_metadata_from_metadata_json() {
-        let root = scratch_dir("metadata");
-        let retrium = root.join(".retrium");
-        std::fs::create_dir_all(&retrium).unwrap();
-        std::fs::write(
-            retrium.join("metadata.json"),
-            r#"{"name":"Doom","release":1993,"series":null,"tags":[]}"#,
-        )
-        .unwrap();
-
-        let info = load_cart_info(&root, "fallback");
-
-        assert_eq!(info.name, "Doom");
-        assert_eq!(info.release, Some(1993));
-        assert_eq!(info.tags, Some(Vec::new()));
-
-        std::fs::remove_dir_all(&root).unwrap();
-    }
-
-    #[test]
-    fn loads_metadata_from_legacy_info_json() {
-        let root = scratch_dir("legacy-info");
-        let retrium = root.join(".retrium");
-        std::fs::create_dir_all(&retrium).unwrap();
-        std::fs::write(retrium.join("info.json"), r#"{"name":"Wolfenstein 3D"}"#).unwrap();
-
-        let info = load_cart_info(&root, "fallback");
-
-        assert_eq!(info.name, "Wolfenstein 3D");
-
-        std::fs::remove_dir_all(&root).unwrap();
-    }
-
-    #[test]
-    fn falls_back_to_folder_name_without_metadata() {
-        let root = scratch_dir("no-metadata");
-        std::fs::create_dir_all(&root).unwrap();
-
-        let info = load_cart_info(&root, "GAME");
-
-        assert_eq!(info.name, "GAME");
-
-        std::fs::remove_dir_all(&root).unwrap();
-    }
 }
