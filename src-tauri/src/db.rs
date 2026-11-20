@@ -13,8 +13,12 @@ use crate::manifest::{Dos, Manifest, ProgramBlock, Tool};
 
 pub const SCHEMA_VERSION: i64 = 1;
 
+/// Idempotent on purpose: `prepare` runs it on every open, not only when the
+/// version changed, so a database whose tables were dropped by hand comes back
+/// instead of failing at the first query. `user_version` decides whether the
+/// tables are *replaced*, never whether they may be created.
 const SCHEMA: &str = r#"
-CREATE TABLE carts (
+CREATE TABLE IF NOT EXISTS carts (
     id               TEXT PRIMARY KEY,
     revision         INTEGER NOT NULL,
     package_hash     TEXT NOT NULL,
@@ -37,19 +41,19 @@ CREATE TABLE carts (
     created_at       TEXT,
     raw_path         TEXT NOT NULL
 );
-CREATE INDEX idx_carts_package_hash ON carts(package_hash);
-CREATE INDEX idx_carts_author       ON carts(author_name);
-CREATE INDEX idx_carts_category     ON carts(category);
-CREATE INDEX idx_carts_language     ON carts(language);
-CREATE INDEX idx_carts_release      ON carts(release);
+CREATE INDEX IF NOT EXISTS idx_carts_package_hash ON carts(package_hash);
+CREATE INDEX IF NOT EXISTS idx_carts_author       ON carts(author_name);
+CREATE INDEX IF NOT EXISTS idx_carts_category     ON carts(category);
+CREATE INDEX IF NOT EXISTS idx_carts_language     ON carts(language);
+CREATE INDEX IF NOT EXISTS idx_carts_release      ON carts(release);
 
-CREATE TABLE summaries (
+CREATE TABLE IF NOT EXISTS summaries (
     cart_id   TEXT PRIMARY KEY,
     last_run  TEXT NOT NULL,
     runs      INTEGER NOT NULL,
     elapsed   INTEGER NOT NULL
 );
-CREATE INDEX idx_summaries_last_run ON summaries(last_run);
+CREATE INDEX IF NOT EXISTS idx_summaries_last_run ON summaries(last_run);
 "#;
 
 /// One cart as stored: the manifest it was written with, plus where the
@@ -104,6 +108,8 @@ impl Db {
                 .map_err(|e| e.to_string())?;
         }
 
+        // Idempotent, so this is safe whether the tables were just dropped or
+        // are already there from the previous run.
         conn.execute_batch(SCHEMA).map_err(|e| e.to_string())?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)
             .map_err(|e| e.to_string())?;
@@ -468,6 +474,29 @@ mod tests {
         let summary = db.get_summary("a").unwrap().unwrap();
         assert_eq!(summary.runs, 2);
         assert_eq!(db.summaries().unwrap().len(), 1);
+    }
+
+    /// The index is opened once per process, so the second launch of the app is
+    /// the first time `prepare` ever sees an existing schema version. It must
+    /// not try to create the tables again.
+    #[test]
+    fn reopens_an_existing_database_without_recreating_tables() {
+        let dir = std::env::temp_dir().join(format!(
+            "retrium-db-reopen-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        {
+            let db = Db::open(&dir).unwrap();
+            db.upsert(&record("a", "one", "1")).unwrap();
+        }
+        let db = Db::open(&dir).unwrap();
+        assert_eq!(db.list().unwrap().len(), 1);
+        drop(db);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
