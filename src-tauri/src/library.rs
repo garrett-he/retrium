@@ -574,6 +574,12 @@ fn copy_entry<W: Write>(name: &str, source: &EntrySource, archive_path: &Path, o
     Ok(())
 }
 
+/// Swap a freshly written archive into place. Public wrapper over the atomic
+/// replace so import can reuse it.
+pub fn replace_archive(temp: &Path, destination: &Path) -> Result<(), String> {
+    replace_file(temp, destination)
+}
+
 /// Replace `destination` with `temp`, keeping the old file until the new one is
 /// in place so a crash cannot leave the library without an archive.
 fn replace_file(temp: &Path, destination: &Path) -> Result<(), String> {

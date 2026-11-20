@@ -3,6 +3,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod hash;
+pub mod import;
 pub mod launch;
 pub mod library;
 pub mod manifest;
@@ -161,10 +162,9 @@ pub struct TargetInfo {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ImportAction {
-    /// Import a cart that is not in the library yet.
-    Keep,
-    /// Overwrite the local cart with the incoming one.
-    Replace,
+    /// Do what `PendingImport::decision` describes, or import a new cart.
+    Apply,
+    /// Leave the library untouched.
     Skip,
 }
 
@@ -229,6 +229,34 @@ pub struct SetupState {
     pub dosbox: String,
 }
 
+/// Build the UI-facing `Cart` from an index row plus the local facts that are
+/// not in the archive (cover file, commit cache, run summary).
+pub fn cart_from(
+    record: &db::CartRecord,
+    layout: &library::Layout,
+    summary: Option<db::Summary>,
+) -> Cart {
+    let id = &record.manifest.cart.id;
+    let cover = layout.install_dir(id).join("Resources/cover.png");
+    let has_cover = cover.is_file();
+
+    Cart {
+        id: id.clone(),
+        revision: record.manifest.cart.revision,
+        info: CartInfo::from(&record.manifest.program),
+        author: record.manifest.cart.author.clone(),
+        created_at: record.manifest.cart.created_at.clone(),
+        cover: has_cover.then(|| cover.to_string_lossy().to_string()),
+        dirty: library::read_commit(layout, id)
+            .map(|commit| commit.package_hash != record.package_hash),
+        summary: summary.map(|s| CartSummary {
+            last_run: s.last_run,
+            runs: s.runs,
+            elapsed: s.elapsed,
+        }),
+    }
+}
+
 /// A running DOSBox process tracked by Retrium.
 pub struct ProcessHandle {
     pub pid: u32,
@@ -274,6 +302,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::discover_carts,
+            commands::add_carts,
+            commands::resolve_import,
             commands::stop_all_carts,
             commands::list_cart_processes,
             commands::get_cart_process,

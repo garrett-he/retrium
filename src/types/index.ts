@@ -89,8 +89,8 @@ export interface ImportReport {
     pending: PendingImport[];
 }
 
-/** `keep` imports a cart that is not in the library yet. */
-export type ImportAction = "keep" | "replace" | "skip";
+/** `apply` performs whatever `PendingImport.decision` describes. */
+export type ImportAction = "apply" | "skip";
 
 export interface ExportPreview {
     dirty: boolean;

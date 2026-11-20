@@ -2,7 +2,7 @@
 //! `launch` and `library`; this layer resolves paths, talks to the database and
 //! turns errors into strings the UI can show.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
 use tauri::{AppHandle, State};
@@ -10,9 +10,9 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::config::{self, Config};
-use crate::db::{Db, Summary};
+use crate::db::Db;
 use crate::library::{self, Layout};
-use crate::{AppState, Cart, CartInfo, CartProcess, CartSummary, SetupState};
+use crate::{cart_from, AppState, Cart, CartInfo, CartProcess, SetupState};
 
 // ---------------------------------------------------------------------------
 // Session helpers
@@ -61,26 +61,6 @@ fn sync_index(layout: &Layout, db: &Db) -> Result<(), String> {
     Ok(())
 }
 
-fn to_cart(record: &crate::db::CartRecord, layout: &Layout, summary: Option<Summary>) -> Cart {
-    let id = &record.manifest.cart.id;
-    let cover = layout.install_dir(id).join("Resources/cover.png");
-    let has_cover = cover.is_file();
-
-    Cart {
-        id: id.clone(),
-        revision: record.manifest.cart.revision,
-        info: CartInfo::from(&record.manifest.program),
-        author: record.manifest.cart.author.clone(),
-        created_at: record.manifest.cart.created_at.clone(),
-        cover: has_cover.then(|| cover.to_string_lossy().to_string()),
-        dirty: library::read_commit(layout, id).map(|commit| commit.package_hash != record.package_hash),
-        summary: summary.map(|s| CartSummary {
-            last_run: s.last_run,
-            runs: s.runs,
-            elapsed: s.elapsed,
-        }),
-    }
-}
 
 #[allow(dead_code)]
 fn is_running(state: &State<'_, AppState>, id: &str) -> Result<bool, String> {
@@ -116,7 +96,7 @@ pub fn discover_carts(state: State<'_, AppState>) -> Result<Vec<Cart>, String> {
         let mut carts = Vec::with_capacity(records.len());
         for record in records {
             let summary = db.get_summary(&record.manifest.cart.id)?;
-            carts.push(to_cart(&record, &session.layout, summary));
+            carts.push(cart_from(&record, &session.layout, summary));
         }
         Ok(carts)
     })
@@ -162,7 +142,7 @@ pub fn update_cart_info(
         db.upsert(&record)?;
 
         let summary = db.get_summary(&id)?;
-        Ok(to_cart(&record, &session.layout, summary))
+        Ok(cart_from(&record, &session.layout, summary))
     })
 }
 
@@ -331,4 +311,151 @@ pub async fn pick_dosbox_executable(app: AppHandle) -> Result<Option<String>, St
         .blocking_pick_file()
         .and_then(|path| path.into_path().ok())
         .map(|path| path.to_string_lossy().to_string()))
+}
+
+// ---------------------------------------------------------------------------
+// Import
+// ---------------------------------------------------------------------------
+
+fn pending_message(decision: crate::ImportDecision, analyzed: &crate::import::Analyzed) -> String {
+    match decision {
+        crate::ImportDecision::Upgrade => format!(
+            "revision {} is newer than the installed one ({})",
+            analyzed.revision(),
+            analyzed.existing_revision.unwrap_or_default()
+        ),
+        crate::ImportDecision::Downgrade => format!(
+            "revision {} is older than the installed one ({})",
+            analyzed.revision(),
+            analyzed.existing_revision.unwrap_or_default()
+        ),
+        crate::ImportDecision::Conflict => "same revision, different content".to_string(),
+        crate::ImportDecision::Duplicate => format!(
+            "identical content is already in the library as {}",
+            analyzed.duplicate_of.clone().unwrap_or_default()
+        ),
+    }
+}
+
+/// Pick carts and import whatever needs no decision. Anything ambiguous comes
+/// back in `pending` and is applied later by `resolve_import`.
+#[tauri::command]
+pub async fn add_carts(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<crate::ImportReport, String> {
+    let files = app
+        .dialog()
+        .file()
+        .add_filter("Retrium Carts", &["cart"])
+        .blocking_pick_files();
+
+    let files = match files {
+        Some(files) => files,
+        None => {
+            return Ok(crate::ImportReport {
+                imported: Vec::new(),
+                skipped: Vec::new(),
+                pending: Vec::new(),
+            })
+        }
+    };
+
+    let session = session(&state)?;
+    let mut report = crate::ImportReport {
+        imported: Vec::new(),
+        skipped: Vec::new(),
+        pending: Vec::new(),
+    };
+
+    with_db(&state, |db| {
+        for file in files {
+            let path = file.into_path().map_err(|e| e.to_string())?;
+            let archive = path.to_string_lossy().to_string();
+
+            let analyzed = match crate::import::analyze(db, &path) {
+                Ok(analyzed) => analyzed,
+                Err(reason) => {
+                    report.skipped.push(crate::ImportNote {
+                        archive,
+                        id: String::new(),
+                        reason,
+                    });
+                    continue;
+                }
+            };
+
+            match analyzed.outcome {
+                crate::import::Outcome::New => {
+                    match crate::import::import_new(&session.layout, db, &analyzed) {
+                        Ok(cart) => report.imported.push(cart),
+                        Err(reason) => report.skipped.push(crate::ImportNote {
+                            archive,
+                            id: analyzed.id().to_string(),
+                            reason,
+                        }),
+                    }
+                }
+                crate::import::Outcome::Idempotent => report.skipped.push(crate::ImportNote {
+                    archive,
+                    id: analyzed.id().to_string(),
+                    reason: "already imported".to_string(),
+                }),
+                crate::import::Outcome::Pending(decision) => {
+                    let message = pending_message(decision, &analyzed);
+                    report.pending.push(crate::PendingImport {
+                        archive,
+                        id: analyzed.id().to_string(),
+                        name: analyzed.name().to_string(),
+                        decision,
+                        message,
+                        existing_revision: analyzed.existing_revision,
+                        incoming_revision: analyzed.revision(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    })?;
+
+    Ok(report)
+}
+
+/// Apply or skip one item that `add_carts` left pending.
+#[tauri::command]
+pub fn resolve_import(
+    archive: String,
+    action: crate::ImportAction,
+    state: State<'_, AppState>,
+) -> Result<Option<Cart>, String> {
+    if action == crate::ImportAction::Skip {
+        return Ok(None);
+    }
+
+    let path = PathBuf::from(&archive);
+    let session = session(&state)?;
+
+    with_db(&state, |db| {
+        let analyzed = crate::import::analyze(db, &path)?;
+        let id = analyzed.id().to_string();
+
+        if is_running(&state, &id)? {
+            return Err(format!("cart is running: {id}"));
+        }
+
+        let cart = match analyzed.outcome {
+            crate::import::Outcome::Idempotent => {
+                let record = db.get(&id)?.ok_or_else(|| format!("cart not found: {id}"))?;
+                let summary = db.get_summary(&id)?;
+                Some(cart_from(&record, &session.layout, summary))
+            }
+            crate::import::Outcome::New => {
+                Some(crate::import::import_new(&session.layout, db, &analyzed)?)
+            }
+            crate::import::Outcome::Pending(_) => {
+                Some(crate::import::replace(&session.layout, db, &analyzed)?)
+            }
+        };
+        Ok(cart)
+    })
 }
