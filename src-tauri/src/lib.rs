@@ -1,5 +1,12 @@
 pub mod commands;
 pub mod config;
+pub mod db;
+pub mod error;
+pub mod hash;
+pub mod launch;
+pub mod library;
+pub mod manifest;
+pub mod state;
 
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;

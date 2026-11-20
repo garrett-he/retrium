@@ -1,0 +1,112 @@
+{
+    "algorithm": "tree_hash v1: sort(u32le(len) || path || sha256(bytes)) then sha256",
+    "cases": [
+        {
+            "name": "empty",
+            "entries": [],
+            "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "name": "single_file",
+            "entries": [
+                {
+                    "path": "Program/A.EXE",
+                    "content": "hello"
+                }
+            ],
+            "expected": "8a2346f379af18fbfaaeba573ea5a33d9894dd1d07713889a0834406dadc493a"
+        },
+        {
+            "name": "two_files",
+            "entries": [
+                {
+                    "path": "Program/A.EXE",
+                    "content": "hello"
+                },
+                {
+                    "path": "Program/B.DAT",
+                    "content": "world"
+                }
+            ],
+            "expected": "c6e73f37009d10e24f9d9b6a355e404011ab67a900c607ca53f0b3e3830ef0d4"
+        },
+        {
+            "name": "two_files_reordered",
+            "entries": [
+                {
+                    "path": "Program/B.DAT",
+                    "content": "world"
+                },
+                {
+                    "path": "Program/A.EXE",
+                    "content": "hello"
+                }
+            ],
+            "expected": "c6e73f37009d10e24f9d9b6a355e404011ab67a900c607ca53f0b3e3830ef0d4"
+        },
+        {
+            "name": "length_prefix_a",
+            "entries": [
+                {
+                    "path": "ab",
+                    "content": ""
+                }
+            ],
+            "expected": "6fe5a52aa72c1a4bce722e9902e426ac3753babca734b288a02a7e8a8e890933"
+        },
+        {
+            "name": "length_prefix_b",
+            "entries": [
+                {
+                    "path": "a",
+                    "content": ""
+                },
+                {
+                    "path": "b",
+                    "content": ""
+                }
+            ],
+            "expected": "6c648e36a279747aa3fe0d2c815919c1f0044564fe695dcdef5830436ec42774"
+        },
+        {
+            "name": "utf8_path",
+            "entries": [
+                {
+                    "path": "Program/中文/游戏.EXE",
+                    "content": "x"
+                }
+            ],
+            "expected": "a8572a7ff228716536c15b67c0f2033d1545b3520083b34381f6767c325d41e4"
+        },
+        {
+            "name": "empty_file",
+            "entries": [
+                {
+                    "path": "Program/EMPTY.DAT",
+                    "content": ""
+                }
+            ],
+            "expected": "f5d268659b82edd09cabe5872d1386042d5a75edd877c8e728527ff2eed9686c"
+        },
+        {
+            "name": "same_bytes_other_path",
+            "entries": [
+                {
+                    "path": "Program/B.EXE",
+                    "content": "same"
+                }
+            ],
+            "expected": "07850b69d72695973168a7bb1462c53beffbae77c0162efb6352fa76ea115018"
+        },
+        {
+            "name": "binary_payload",
+            "entries": [
+                {
+                    "path": "Program/BIN.DAT",
+                    "content_hex": "00ff10"
+                }
+            ],
+            "expected": "13a6597f065aab0af399e2cecfc14a2ce677e50004e1428f2f839628af261944"
+        }
+    ]
+}
