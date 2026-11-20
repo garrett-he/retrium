@@ -1014,6 +1014,68 @@ mod tests {
     }
 
     #[test]
+    fn export_hash_reports_whether_anything_changed() {
+        let root = scratch("dirty");
+        let archive = build_cart(&root, &[("Program/GAME.EXE", "original")]);
+        let layout = Layout::new(&root);
+        let before = inspect(&archive).unwrap();
+        let cart = &before.manifest.cart;
+
+        let clean = export_hash(
+            &layout,
+            ID,
+            &before.manifest,
+            cart.revision,
+            &cart.tool,
+            &cart.created_at,
+        )
+        .unwrap();
+        assert_eq!(clean, before.hash, "an untouched cart must not look dirty");
+
+        write_at(layout.program_dir(ID).join("PATCH.DAT"), "note");
+        let dirty = export_hash(
+            &layout,
+            ID,
+            &before.manifest,
+            cart.revision,
+            &cart.tool,
+            &cart.created_at,
+        )
+        .unwrap();
+        assert_ne!(dirty, before.hash);
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_save_in_state_does_not_make_the_cart_dirty() {
+        let root = scratch("dirty-save");
+        let archive = build_cart(&root, &[("Program/GAME.EXE", "x")]);
+        let layout = Layout::new(&root);
+        let before = inspect(&archive).unwrap();
+        let cart = &before.manifest.cart;
+
+        // A run rewrote the executable and produced a save.
+        write_at(layout.program_dir(ID).join("GAME.EXE"), "patched");
+        write_at(layout.program_dir(ID).join("SAVE01.DAT"), "save");
+        write_at(layout.state_dir(ID).join("Program/GAME.EXE"), "patched");
+        write_at(layout.state_dir(ID).join("Program/SAVE01.DAT"), "save");
+
+        let hash = export_hash(
+            &layout,
+            ID,
+            &before.manifest,
+            cart.revision,
+            &cart.tool,
+            &cart.created_at,
+        )
+        .unwrap();
+        assert_eq!(hash, before.hash, "saves belong to the player, not the cart");
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn load_record_falls_back_to_hashing_without_a_commit_cache() {
         let root = scratch("record");
         let archive = build_cart(&root, &[("Program/GAME.EXE", "x")]);

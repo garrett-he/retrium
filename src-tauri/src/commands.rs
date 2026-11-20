@@ -10,7 +10,7 @@ use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::config::{self, Config};
-use crate::db::Db;
+use crate::db::{CartRecord, Db};
 use crate::library::{self, Layout};
 use crate::{cart_from, AppState, Cart, CartInfo, CartProcess, SetupState};
 
@@ -647,4 +647,147 @@ pub fn repair_cart(id: String, state: State<'_, AppState>) -> Result<(), String>
     }
     let session = session(&state)?;
     library::repair(&session.layout, &id)
+}
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+/// Compare the installed copy against the archive without writing anything.
+#[tauri::command]
+pub fn preview_export(id: String, state: State<'_, AppState>) -> Result<crate::ExportPreview, String> {
+    let session = session(&state)?;
+    with_db(&state, |db| {
+        let record = db.get(&id)?.ok_or_else(|| format!("cart not found: {id}"))?;
+        let cart = &record.manifest.cart;
+
+        // Same inputs `commit_cart` would use when the revision does not change.
+        let current = library::export_hash(
+            &session.layout,
+            &id,
+            &record.manifest,
+            cart.revision,
+            &cart.tool,
+            &cart.created_at,
+        )?;
+        let dirty = current != record.package_hash;
+
+        Ok(crate::ExportPreview {
+            dirty,
+            revision: cart.revision,
+            next_revision: if dirty { cart.revision + 1 } else { cart.revision },
+            package_hash: record.package_hash.clone(),
+            current_hash: current,
+        })
+    })
+}
+
+/// Rebuild `carts/<id>.cart` from the installed copy.
+///
+/// `tool` and `createdAt` are only refreshed when the revision changes: keeping
+/// them stable for a same-revision export is what makes "nothing changed"
+/// detectable at all, since `createdAt` is part of the manifest and therefore
+/// part of the hash.
+#[tauri::command]
+pub fn commit_cart(id: String, revision: Option<i64>, state: State<'_, AppState>) -> Result<Cart, String> {
+    if is_running(&state, &id)? {
+        return Err(format!("cart is running: {id}"));
+    }
+
+    let session = session(&state)?;
+    with_db(&state, |db| {
+        let record = db.get(&id)?.ok_or_else(|| format!("cart not found: {id}"))?;
+        let current = record.manifest.cart.revision;
+        let target = revision.unwrap_or(current);
+
+        if target < current {
+            return Err(format!(
+                "revision must not decrease (current {current}, requested {target})"
+            ));
+        }
+
+        let (tool, created_at) = if target != current {
+            (crate::current_tool(), chrono::Utc::now().to_rfc3339())
+        } else {
+            (
+                record.manifest.cart.tool.clone(),
+                record.manifest.cart.created_at.clone(),
+            )
+        };
+
+        let (manifest, package_hash) =
+            library::commit(&session.layout, &id, &record.manifest, target, &tool, &created_at)?;
+
+        let updated = CartRecord {
+            manifest,
+            package_hash: package_hash.clone(),
+            raw_path: record.raw_path.clone(),
+        };
+        db.upsert(&updated)?;
+        library::write_commit(
+            &session.layout,
+            &id,
+            &library::CommitInfo {
+                revision: target,
+                package_hash,
+                manifest_version: updated.manifest.version,
+            },
+        )?;
+
+        let summary = db.get_summary(&id)?;
+        Ok(cart_from(&updated, &session.layout, summary))
+    })
+}
+
+/// Copy the current archive somewhere else, for sharing. Whatever is on disk is
+/// what gets copied: run `commit_cart` first if the local copy has moved on.
+#[tauri::command]
+pub async fn export_cart_file(
+    id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    let session = session(&state)?;
+    let archive = session.layout.archive(&id);
+    if !archive.is_file() {
+        return Err(format!("archive is missing: {}", archive.display()));
+    }
+
+    let name = with_db(&state, |db| {
+        Ok(db
+            .get(&id)?
+            .map(|record| record.manifest.program.name)
+            .unwrap_or_else(|| id.clone()))
+    })?;
+
+    let chosen = app
+        .dialog()
+        .file()
+        .add_filter("Retrium Carts", &["cart"])
+        .set_file_name(format!("{}.cart", sanitize_file_name(&name)))
+        .blocking_save_file();
+
+    let Some(chosen) = chosen else {
+        return Ok(None);
+    };
+    let destination = chosen.into_path().map_err(|e| e.to_string())?;
+    std::fs::copy(&archive, &destination).map_err(|e| e.to_string())?;
+    Ok(Some(destination.to_string_lossy().to_string()))
+}
+
+fn sanitize_file_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.').to_string();
+    if trimmed.is_empty() {
+        "cart".to_string()
+    } else {
+        trimmed
+    }
 }
