@@ -8,6 +8,7 @@ import { type CartMenuActions, CartMenuButton } from "@/components/CartMenu";
 import { CoverArt } from "@/components/CoverArt";
 import { MsIcon } from "@/components/MsIcon";
 import { RunningChip } from "@/components/RunningChip";
+import { categoryLabel, useT } from "@/i18n";
 import { formatPlaytime } from "@/lib/format";
 import type { Cart, TargetInfo } from "@/types";
 
@@ -20,6 +21,7 @@ interface CartRowProps {
 
 /** Compact table row used by the list view of the library. */
 export function CartRow({ cart, running, actions, targets }: CartRowProps) {
+    const t = useT();
     const navigate = useNavigate();
 
     return (
@@ -32,7 +34,7 @@ export function CartRow({ cart, running, actions, targets }: CartRowProps) {
                     {cart.info.name}
                 </Typography>
             </TableCell>
-            <TableCell>{cart.info.category ?? "Uncategorized"}</TableCell>
+            <TableCell>{categoryLabel(t, cart.info.category)}</TableCell>
             <TableCell sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>{cart.info.release ?? "—"}</TableCell>
             <TableCell sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>r{cart.revision}</TableCell>
             <TableCell sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
@@ -45,7 +47,7 @@ export function CartRow({ cart, running, actions, targets }: CartRowProps) {
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                     {running && <RunningChip small />}
                     {cart.dirty && (
-                        <Tooltip title="Local changes have not been exported yet">
+                        <Tooltip title={t("cart.dirty.tooltip")}>
                             <MsIcon data-testid={`dirty-${cart.id}`} sx={{ fontSize: 16, color: "warning.main" }}>
                                 edit_note
                             </MsIcon>

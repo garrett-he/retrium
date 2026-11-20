@@ -1,5 +1,6 @@
 import Chip from "@mui/material/Chip";
 import type { SxProps, Theme } from "@mui/material/styles";
+import { useT } from "@/i18n";
 
 interface RunningChipProps {
     small?: boolean;
@@ -8,11 +9,12 @@ interface RunningChipProps {
 
 /** Pulsing badge indicating a cart is currently emulated. */
 export function RunningChip({ small = false, sx }: RunningChipProps) {
+    const t = useT();
     return (
         <Chip
             size="small"
             icon={<span className="pulse-dot" />}
-            label="Running"
+            label={t("running.chip")}
             sx={{
                 bgcolor: "rgba(23,20,18,0.85)",
                 color: "#8FE093",

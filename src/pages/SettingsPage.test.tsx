@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeBackend } from "@/__mocks__/backend";
 import { CartsProvider } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
+import { I18nProvider } from "@/i18n";
 import { SettingsPage } from "./SettingsPage";
 
 const { invoke, openUrl } = vi.hoisted(() => ({
@@ -19,18 +20,21 @@ const probe = { path: "C:\\DOSBox\\dosbox.exe", exists: true, version: "DOSBox 0
 
 function renderPage(mode: "dark" | "light" = "dark", onModeChange = vi.fn()) {
     return render(
-        <MemoryRouter>
-            <SnackbarProvider>
-                <CartsProvider>
-                    <SettingsPage mode={mode} onModeChange={onModeChange} />
-                </CartsProvider>
-            </SnackbarProvider>
-        </MemoryRouter>,
+        <I18nProvider>
+            <MemoryRouter>
+                <SnackbarProvider>
+                    <CartsProvider>
+                        <SettingsPage mode={mode} onModeChange={onModeChange} />
+                    </CartsProvider>
+                </SnackbarProvider>
+            </MemoryRouter>
+        </I18nProvider>,
     );
 }
 
 describe("SettingsPage", () => {
     beforeEach(() => {
+        localStorage.removeItem("retrium-language");
         invoke.mockReset();
         invoke.mockImplementation(
             makeBackend({
@@ -62,6 +66,21 @@ describe("SettingsPage", () => {
         renderPage();
         expect(await screen.findByDisplayValue("C:\\DOSBox\\dosbox.exe")).toBeTruthy();
         expect(await screen.findByText("Found DOSBox DOSBox 0.74-3")).toBeTruthy();
+    });
+
+    it("switches the interface language and remembers the choice", async () => {
+        const user = userEvent.setup();
+        renderPage();
+        await screen.findByText("Storage");
+
+        await user.click(screen.getByLabelText("Language"));
+        await user.click(await screen.findByRole("option", { name: "简体中文" }));
+
+        expect(await screen.findByText("存储")).toBeTruthy();
+        expect(screen.getByText("外观")).toBeTruthy();
+        expect(screen.queryByText("Storage")).toBeNull();
+        expect(localStorage.getItem("retrium-language")).toBe("zh-CN");
+        expect(document.documentElement.lang).toBe("zh-CN");
     });
 
     it("opens the homepage in the default browser", async () => {

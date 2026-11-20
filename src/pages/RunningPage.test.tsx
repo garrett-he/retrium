@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { civilization, doom, makeBackend, processFor, wolfenstein } from "@/__mocks__/backend";
 import { CartsProvider } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
+import { I18nProvider } from "@/i18n";
 import type { CartProcess } from "@/types";
 import { RunningPage } from "./RunningPage";
 
@@ -14,13 +15,15 @@ vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: vi.fn((p: string) => p)
 
 function renderPage() {
     return render(
-        <MemoryRouter>
-            <SnackbarProvider>
-                <CartsProvider>
-                    <RunningPage />
-                </CartsProvider>
-            </SnackbarProvider>
-        </MemoryRouter>,
+        <I18nProvider>
+            <MemoryRouter>
+                <SnackbarProvider>
+                    <CartsProvider>
+                        <RunningPage />
+                    </CartsProvider>
+                </SnackbarProvider>
+            </MemoryRouter>
+        </I18nProvider>,
     );
 }
 

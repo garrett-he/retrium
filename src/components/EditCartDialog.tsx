@@ -12,6 +12,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useEffect, useState } from "react";
+import { categoryLabel, useT } from "@/i18n";
 import type { Author, Cart, CartInfo } from "@/types";
 
 /** The eight values `program.category` accepts. Anything else fails at import. */
@@ -139,6 +140,7 @@ function parseExternalIds(value: string): Record<string, string> | undefined {
 
 /** Modal form for editing `program.*` metadata and the optional `cart.author`. */
 export function EditCartDialog({ cart, onClose, onSave }: EditCartDialogProps) {
+    const t = useT();
     const [draft, setDraft] = useState<Draft | null>(null);
     const [saving, setSaving] = useState(false);
 
@@ -192,17 +194,17 @@ export function EditCartDialog({ cart, onClose, onSave }: EditCartDialogProps) {
 
     return (
         <Dialog open maxWidth="sm" fullWidth onClose={onClose}>
-            <DialogTitle>Edit “{cart.info.name}”</DialogTitle>
+            <DialogTitle>{t("edit.title", { name: cart.info.name })}</DialogTitle>
             <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "8px !important" }}>
                 <TextField
-                    label="Name"
+                    label={t("edit.name")}
                     size="small"
                     value={draft.name}
                     onChange={(event) => set("name", event.target.value)}
                 />
                 <Stack direction="row" spacing={2}>
                     <TextField
-                        label="Release year"
+                        label={t("edit.release")}
                         size="small"
                         type="number"
                         sx={{ width: 150 }}
@@ -210,7 +212,7 @@ export function EditCartDialog({ cart, onClose, onSave }: EditCartDialogProps) {
                         onChange={(event) => set("release", event.target.value)}
                     />
                     <TextField
-                        label="Players"
+                        label={t("edit.players")}
                         size="small"
                         type="number"
                         sx={{ width: 120 }}
@@ -218,19 +220,19 @@ export function EditCartDialog({ cart, onClose, onSave }: EditCartDialogProps) {
                         onChange={(event) => set("players", event.target.value)}
                     />
                     <FormControl size="small" fullWidth>
-                        <InputLabel id="cart-category">Category</InputLabel>
+                        <InputLabel id="cart-category">{t("edit.category")}</InputLabel>
                         <Select
                             labelId="cart-category"
-                            label="Category"
+                            label={t("edit.category")}
                             value={draft.category}
                             onChange={(event) => set("category", event.target.value)}
                         >
                             <MenuItem value="">
-                                <em>Unset</em>
+                                <em>{t("edit.category.unset")}</em>
                             </MenuItem>
                             {CATEGORIES.map((category) => (
                                 <MenuItem key={category} value={category}>
-                                    {category}
+                                    {categoryLabel(t, category)}
                                 </MenuItem>
                             ))}
                         </Select>
@@ -238,14 +240,14 @@ export function EditCartDialog({ cart, onClose, onSave }: EditCartDialogProps) {
                 </Stack>
                 <Stack direction="row" spacing={2}>
                     <TextField
-                        label="Developer"
+                        label={t("edit.developer")}
                         size="small"
                         fullWidth
                         value={draft.developer}
                         onChange={(event) => set("developer", event.target.value)}
                     />
                     <TextField
-                        label="Publisher"
+                        label={t("edit.publisher")}
                         size="small"
                         fullWidth
                         value={draft.publisher}
@@ -254,7 +256,7 @@ export function EditCartDialog({ cart, onClose, onSave }: EditCartDialogProps) {
                 </Stack>
                 <Stack direction="row" spacing={2}>
                     <TextField
-                        label="Series"
+                        label={t("edit.series")}
                         size="small"
                         fullWidth
                         value={draft.series}
@@ -269,9 +271,9 @@ export function EditCartDialog({ cart, onClose, onSave }: EditCartDialogProps) {
                         renderInput={(params) => (
                             <TextField
                                 {...params}
-                                label="Language"
+                                label={t("edit.language")}
                                 size="small"
-                                placeholder="BCP 47, e.g. en"
+                                placeholder={t("edit.language.placeholder")}
                                 fullWidth
                             />
                         )}
@@ -280,62 +282,62 @@ export function EditCartDialog({ cart, onClose, onSave }: EditCartDialogProps) {
                 </Stack>
                 <Stack direction="row" spacing={2}>
                     <TextField
-                        label="Platform"
+                        label={t("edit.platform")}
                         size="small"
                         fullWidth
-                        placeholder="e.g. DOS"
+                        placeholder={t("edit.platform.placeholder")}
                         value={draft.platform}
                         onChange={(event) => set("platform", event.target.value)}
                     />
                     <TextField
-                        label="DOS version"
+                        label={t("edit.dosVersion")}
                         size="small"
                         fullWidth
-                        placeholder="e.g. MS-DOS 5.0"
+                        placeholder={t("edit.dosVersion.placeholder")}
                         value={draft.dosVersion}
                         onChange={(event) => set("dosVersion", event.target.value)}
                     />
                 </Stack>
                 <TextField
-                    label="DOS input"
+                    label={t("edit.dosInput")}
                     size="small"
-                    placeholder="e.g. Keyboard, Mouse"
+                    placeholder={t("edit.dosInput.placeholder")}
                     value={draft.dosInputText}
                     onChange={(event) => set("dosInputText", event.target.value)}
-                    helperText="Comma separated"
+                    helperText={t("edit.commaSeparated")}
                 />
                 <TextField
-                    label="Tags"
+                    label={t("edit.tags")}
                     size="small"
                     value={draft.tagsText}
                     onChange={(event) => set("tagsText", event.target.value)}
-                    helperText="Comma separated; shown as chips on the detail page"
+                    helperText={t("edit.tags.helper")}
                 />
                 <TextField
-                    label="External ids"
+                    label={t("edit.externalIds")}
                     size="small"
                     multiline
                     minRows={2}
                     placeholder={"mobygames=12345\nigdb=1029"}
                     value={draft.externalIdsText}
                     onChange={(event) => set("externalIdsText", event.target.value)}
-                    helperText="One key=value per line"
+                    helperText={t("edit.externalIds.helper")}
                 />
                 <Typography variant="subtitle2" color="text.secondary">
-                    Author
+                    {t("edit.author")}
                 </Typography>
                 <Stack direction="row" spacing={2}>
                     <TextField
-                        label="Author name"
+                        label={t("edit.author.name")}
                         size="small"
                         fullWidth
                         value={draft.authorName}
                         onChange={(event) => set("authorName", event.target.value)}
                         error={authorInvalid}
-                        helperText={authorInvalid ? "A name is required when an email is set" : undefined}
+                        helperText={authorInvalid ? t("edit.author.requiresName") : undefined}
                     />
                     <TextField
-                        label="Author email"
+                        label={t("edit.author.email")}
                         size="small"
                         fullWidth
                         value={draft.authorEmail}
@@ -344,13 +346,13 @@ export function EditCartDialog({ cart, onClose, onSave }: EditCartDialogProps) {
                 </Stack>
             </DialogContent>
             <DialogActions>
-                <Button onClick={onClose}>Cancel</Button>
+                <Button onClick={onClose}>{t("common.cancel")}</Button>
                 <Button
                     variant="contained"
                     disabled={saving || draft.name.trim().length === 0 || authorInvalid}
                     onClick={submit}
                 >
-                    Save changes
+                    {t("edit.save")}
                 </Button>
             </DialogActions>
         </Dialog>

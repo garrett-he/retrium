@@ -9,6 +9,7 @@ import { type CartMenuActions, CartMenuButton } from "@/components/CartMenu";
 import { CoverArt } from "@/components/CoverArt";
 import { MsIcon } from "@/components/MsIcon";
 import { RunningChip } from "@/components/RunningChip";
+import { categoryLabel, useT } from "@/i18n";
 import { formatPlaytime } from "@/lib/format";
 import type { Cart, TargetInfo } from "@/types";
 
@@ -21,6 +22,7 @@ interface CartCardProps {
 
 /** Grid card showing cover art, quick metadata and a kebab menu. */
 export function CartCard({ cart, running, actions, targets }: CartCardProps) {
+    const t = useT();
     const navigate = useNavigate();
 
     return (
@@ -50,7 +52,11 @@ export function CartCard({ cart, running, actions, targets }: CartCardProps) {
                         color="text.secondary"
                         sx={{ fontFamily: '"IBM Plex Mono", monospace' }}
                     >
-                        {cart.info.release ?? "—"} · {cart.info.category ?? "Uncategorized"} · r{cart.revision}
+                        {t("library.card.meta", {
+                            release: cart.info.release ?? "—",
+                            category: categoryLabel(t, cart.info.category),
+                            revision: cart.revision,
+                        })}
                     </Typography>
                     <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1 }}>
                         <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
@@ -66,7 +72,7 @@ export function CartCard({ cart, running, actions, targets }: CartCardProps) {
                             </Typography>
                         </Stack>
                         {cart.dirty && (
-                            <Tooltip title="Local changes have not been exported yet">
+                            <Tooltip title={t("cart.dirty.tooltip")}>
                                 <MsIcon data-testid={`dirty-${cart.id}`} sx={{ fontSize: 15, color: "warning.main" }}>
                                     edit_note
                                 </MsIcon>

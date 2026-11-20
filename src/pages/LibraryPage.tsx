@@ -28,18 +28,27 @@ import { ImportReportDialog } from "@/components/ImportReportDialog";
 import { MsIcon } from "@/components/MsIcon";
 import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
+import { categoryLabel, useT } from "@/i18n";
 import { api } from "@/lib/api";
 import type { Cart, ImportReport } from "@/types";
 
 type SortKey = "recent" | "name" | "year";
 
+/**
+ * Filter sentinels, deliberately lower-case so they can never collide with a
+ * real `program.category` value ("game", "utility", …) or with a display label.
+ */
+const ALL = "all";
+const UNCATEGORIZED = "uncategorized";
+
 /** Library home: stats overview, search, filters, grid/list views and quick actions. */
 export function LibraryPage() {
+    const t = useT();
     const { notify } = useSnackbar();
     const { carts, processes, launch, loadLaunch, runCart, stopCart, deleteCart, addCarts } = useCartsContext();
 
     const [query, setQuery] = useState("");
-    const [category, setCategory] = useState("All");
+    const [category, setCategory] = useState<string>(ALL);
     const [sort, setSort] = useState<SortKey>("recent");
     const [view, setView] = useState<"grid" | "list">("grid");
     const [adding, setAdding] = useState(false);
@@ -52,7 +61,7 @@ export function LibraryPage() {
     const filtered = useMemo(() => {
         const needle = query.trim().toLowerCase();
         const list = carts.filter((cart) => {
-            const inCategory = category === "All" || (cart.info.category ?? "Uncategorized") === category;
+            const inCategory = category === ALL || (cart.info.category ?? UNCATEGORIZED) === category;
             const haystack = [cart.info.name, cart.info.developer, ...(cart.info.tags ?? [])].join(" ").toLowerCase();
             return inCategory && (needle.length === 0 || haystack.includes(needle));
         });
@@ -68,13 +77,22 @@ export function LibraryPage() {
     }, [carts, query, category, sort]);
 
     const categories = useMemo(() => {
-        const values = new Set(carts.map((cart) => cart.info.category ?? "Uncategorized"));
-        return ["All", ...[...values].sort((a, b) => a.localeCompare(b))];
+        const values = new Set(carts.map((cart) => cart.info.category ?? UNCATEGORIZED));
+        return [ALL, ...[...values].sort((a, b) => a.localeCompare(b))];
     }, [carts]);
+
+    const categoryText = (value: string) => {
+        if (value === ALL) {
+            return t("library.filter.all");
+        }
+        return value === UNCATEGORIZED ? t("common.uncategorized") : categoryLabel(t, value);
+    };
 
     const handleRun = (cart: Cart, targetId?: string) => {
         runCart(cart.id, targetId)
-            .then((process) => notify(`Launched ${cart.info.name} · ${process.targetLabel}`, "success"))
+            .then((process) =>
+                notify(t("library.toast.launched", { name: cart.info.name, target: process.targetLabel }), "success"),
+            )
             .catch((error) => notify(String(error), "error"));
     };
 
@@ -82,12 +100,12 @@ export function LibraryPage() {
         run: handleRun,
         stop: (cart) => {
             stopCart(cart.id)
-                .then(() => notify(`${cart.info.name} stopped`, "info"))
+                .then(() => notify(t("library.toast.stopped", { name: cart.info.name }), "info"))
                 .catch((error) => notify(String(error), "error"));
         },
         browse: (cart) => {
             api.openCartFolder(cart.id)
-                .then(() => notify(`Opened ${cart.info.name} folder`, "info"))
+                .then(() => notify(t("library.toast.opened", { name: cart.info.name }), "info"))
                 .catch((error) => notify(String(error), "error"));
         },
         exportCart: (cart) => setExporting(cart),
@@ -106,7 +124,7 @@ export function LibraryPage() {
             return;
         }
         deleteCart(cart.id)
-            .then(() => notify(`${cart.info.name} deleted`, "info"))
+            .then(() => notify(t("library.toast.deleted", { name: cart.info.name }), "info"))
             .catch((error) => notify(String(error), "error"));
     };
 
@@ -115,7 +133,7 @@ export function LibraryPage() {
         addCarts()
             .then((result) => {
                 if (result.imported.length === 0 && result.skipped.length === 0 && result.pending.length === 0) {
-                    notify("No carts selected", "info");
+                    notify(t("library.toast.noneSelected"), "info");
                     return;
                 }
                 setReport(result);
@@ -131,7 +149,7 @@ export function LibraryPage() {
                     <TextField
                         size="small"
                         fullWidth
-                        placeholder="Search by name, developer or tag…"
+                        placeholder={t("library.search.placeholder")}
                         value={query}
                         onChange={(event) => setQuery(event.target.value)}
                         InputProps={{
@@ -143,7 +161,11 @@ export function LibraryPage() {
                             endAdornment:
                                 query.length > 0 ? (
                                     <InputAdornment position="end">
-                                        <IconButton size="small" aria-label="Clear search" onClick={() => setQuery("")}>
+                                        <IconButton
+                                            size="small"
+                                            aria-label={t("library.search.clear")}
+                                            onClick={() => setQuery("")}
+                                        >
                                             <MsIcon sx={{ fontSize: 18 }}>close</MsIcon>
                                         </IconButton>
                                     </InputAdornment>
@@ -154,13 +176,13 @@ export function LibraryPage() {
                         select
                         size="small"
                         sx={{ minWidth: 180 }}
-                        label="Category"
+                        label={t("library.filter.category")}
                         value={category}
                         onChange={(event) => setCategory(event.target.value)}
                     >
                         {categories.map((cat) => (
                             <MenuItem key={cat} value={cat}>
-                                {cat}
+                                {categoryText(cat)}
                             </MenuItem>
                         ))}
                     </TextField>
@@ -168,27 +190,27 @@ export function LibraryPage() {
                         select
                         size="small"
                         sx={{ minWidth: 180 }}
-                        label="Sort"
+                        label={t("library.sort.label")}
                         value={sort}
                         onChange={(event) => setSort(event.target.value as SortKey)}
                     >
-                        <MenuItem value="recent">Recently played</MenuItem>
-                        <MenuItem value="name">Name A–Z</MenuItem>
-                        <MenuItem value="year">Release year</MenuItem>
+                        <MenuItem value="recent">{t("library.sort.recent")}</MenuItem>
+                        <MenuItem value="name">{t("library.sort.name")}</MenuItem>
+                        <MenuItem value="year">{t("library.sort.year")}</MenuItem>
                     </TextField>
-                    <Tooltip title={view === "grid" ? "Switch to list view" : "Switch to grid view"}>
+                    <Tooltip title={view === "grid" ? t("library.view.toList") : t("library.view.toGrid")}>
                         <IconButton
-                            aria-label="Toggle view"
+                            aria-label={t("library.view.toggle")}
                             onClick={() => setView(view === "grid" ? "list" : "grid")}
                             sx={{ border: "1px solid", borderColor: "divider", borderRadius: "10px" }}
                         >
                             <MsIcon>{view === "grid" ? "view_list" : "grid_view"}</MsIcon>
                         </IconButton>
                     </Tooltip>
-                    <Tooltip title="Add carts">
+                    <Tooltip title={t("library.add")}>
                         <span>
                             <IconButton
-                                aria-label="Add carts"
+                                aria-label={t("library.add")}
                                 disabled={adding}
                                 onClick={handleAdd}
                                 sx={{
@@ -208,31 +230,31 @@ export function LibraryPage() {
                     <Paper variant="outlined" sx={{ py: 8, textAlign: "center" }}>
                         <MsIcon sx={{ fontSize: 44, color: "text.secondary" }}>inventory_2</MsIcon>
                         <Typography variant="h6" sx={{ mt: 1 }}>
-                            The shelf is empty
+                            {t("library.empty.title")}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Import a .cart file to put something on it.
+                            {t("library.empty.body")}
                         </Typography>
                         <Button variant="contained" disabled={adding} onClick={handleAdd}>
-                            Import .cart
+                            {t("library.empty.action")}
                         </Button>
                     </Paper>
                 ) : filtered.length === 0 ? (
                     <Paper variant="outlined" sx={{ py: 8, textAlign: "center" }}>
                         <MsIcon sx={{ fontSize: 44, color: "text.secondary" }}>search_off</MsIcon>
                         <Typography variant="h6" sx={{ mt: 1 }}>
-                            Nothing on this shelf
+                            {t("library.noMatch.title")}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            No cart matches your filters.
+                            {t("library.noMatch.body")}
                         </Typography>
                         <Button
                             onClick={() => {
                                 setQuery("");
-                                setCategory("All");
+                                setCategory(ALL);
                             }}
                         >
-                            Clear filters
+                            {t("library.noMatch.action")}
                         </Button>
                     </Paper>
                 ) : view === "grid" ? (
@@ -260,16 +282,16 @@ export function LibraryPage() {
                     </Box>
                 ) : (
                     <TableContainer component={Paper} variant="outlined">
-                        <Table size="small" aria-label="Cart list">
+                        <Table size="small" aria-label={t("library.table.label")}>
                             <TableHead>
                                 <TableRow>
-                                    <TableCell>Cart</TableCell>
-                                    <TableCell>Category</TableCell>
-                                    <TableCell>Year</TableCell>
-                                    <TableCell>Revision</TableCell>
-                                    <TableCell>Playtime</TableCell>
-                                    <TableCell>Runs</TableCell>
-                                    <TableCell>Status</TableCell>
+                                    <TableCell>{t("library.table.cart")}</TableCell>
+                                    <TableCell>{t("library.table.category")}</TableCell>
+                                    <TableCell>{t("library.table.year")}</TableCell>
+                                    <TableCell>{t("library.table.revision")}</TableCell>
+                                    <TableCell>{t("library.table.playtime")}</TableCell>
+                                    <TableCell>{t("library.table.runs")}</TableCell>
+                                    <TableCell>{t("library.table.status")}</TableCell>
                                     <TableCell />
                                 </TableRow>
                             </TableHead>
@@ -290,17 +312,14 @@ export function LibraryPage() {
             </Box>
 
             <Dialog open={deleting !== null} onClose={() => setDeleting(null)}>
-                <DialogTitle>Delete “{deleting?.info.name}”?</DialogTitle>
+                <DialogTitle>{t("library.delete.title", { name: deleting?.info.name ?? "" })}</DialogTitle>
                 <DialogContent>
-                    <DialogContentText>
-                        Its archive, its installed copy and every save file written during a run will be removed. This
-                        cannot be undone.
-                    </DialogContentText>
+                    <DialogContentText>{t("library.delete.body")}</DialogContentText>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setDeleting(null)}>Cancel</Button>
+                    <Button onClick={() => setDeleting(null)}>{t("common.cancel")}</Button>
                     <Button color="error" variant="contained" onClick={confirmDelete}>
-                        Delete permanently
+                        {t("library.delete.confirm")}
                     </Button>
                 </DialogActions>
             </Dialog>

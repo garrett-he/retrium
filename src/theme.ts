@@ -17,7 +17,7 @@ export function buildTheme(mode: ThemeMode) {
         },
         shape: { borderRadius: 12 },
         typography: {
-            fontFamily: '"IBM Plex Sans", sans-serif',
+            fontFamily: '"IBM Plex Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif',
             h4: { fontWeight: 700, letterSpacing: "-0.01em" },
             h5: { fontWeight: 700 },
             h6: { fontWeight: 600 },

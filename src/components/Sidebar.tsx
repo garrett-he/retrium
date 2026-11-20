@@ -9,6 +9,7 @@ import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import { useLocation, useNavigate } from "react-router-dom";
 import { MsIcon } from "@/components/MsIcon";
+import { useT } from "@/i18n";
 import type { ThemeMode } from "@/theme";
 
 export const SIDEBAR_WIDTH = 232;
@@ -21,13 +22,14 @@ interface SidebarProps {
 
 /** Persistent navigation drawer with the Retrium brand and theme switch. */
 export function Sidebar({ runningCount, mode, onModeChange }: SidebarProps) {
+    const t = useT();
     const navigate = useNavigate();
     const { pathname } = useLocation();
 
     const items = [
-        { key: "/", label: "Library", icon: "grid_view" },
-        { key: "/running", label: "Running", icon: "play_circle", badge: runningCount },
-        { key: "/settings", label: "Settings", icon: "settings" },
+        { key: "/", label: t("nav.library"), icon: "grid_view" },
+        { key: "/running", label: t("nav.running"), icon: "play_circle", badge: runningCount },
+        { key: "/settings", label: t("nav.settings"), icon: "settings" },
     ];
 
     return (
@@ -88,7 +90,7 @@ export function Sidebar({ runningCount, mode, onModeChange }: SidebarProps) {
                     <MsIcon sx={{ fontSize: 18 }}>dark_mode</MsIcon>
                     <Switch
                         size="small"
-                        inputProps={{ "aria-label": "Toggle light theme" }}
+                        inputProps={{ "aria-label": t("sidebar.toggleTheme") }}
                         checked={mode === "light"}
                         onChange={(event) => onModeChange(event.target.checked ? "light" : "dark")}
                     />

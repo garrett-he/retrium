@@ -2,6 +2,7 @@ import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
@@ -12,6 +13,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { MsIcon } from "@/components/MsIcon";
 import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
+import { LANGUAGE_OPTIONS, type Language, useI18n } from "@/i18n";
 import { api } from "@/lib/api";
 import type { ThemeMode } from "@/theme";
 import type { DosboxProbe } from "@/types";
@@ -55,6 +57,7 @@ function InfoRow({ label, value, mono = false, action }: InfoRowProps) {
 
 /** Settings: storage, the single DOSBox path, appearance and about. */
 export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeChange: (mode: ThemeMode) => void }) {
+    const { t, language, setLanguage } = useI18n();
     const { notify } = useSnackbar();
     const { setupState, dosbox, changeLibraryDirectory, saveDosboxPath } = useCartsContext();
 
@@ -92,7 +95,9 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
             .then((result) => {
                 setProbe(result);
                 notify(
-                    result.version ? `DOSBox ${result.version} saved` : "DOSBox path saved (version unknown)",
+                    result.version
+                        ? t("settings.dosbox.saved", { version: result.version })
+                        : t("settings.dosbox.savedUnknown"),
                     "success",
                 );
             })
@@ -106,7 +111,9 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                 if (!picked) {
                     return;
                 }
-                return changeLibraryDirectory(picked).then(() => notify(`Library moved to ${picked}`, "success"));
+                return changeLibraryDirectory(picked).then(() =>
+                    notify(t("settings.toast.libraryMoved", { path: picked }), "success"),
+                );
             })
             .catch((error) => notify(String(error), "error"));
     };
@@ -119,27 +126,26 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                 <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
                     <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
                         <MsIcon sx={{ color: "primary.main" }}>database</MsIcon>
-                        <Typography variant="h6">Storage</Typography>
+                        <Typography variant="h6">{t("settings.storage.title")}</Typography>
                     </Stack>
-                    <InfoRow label="Library" value={setupState?.library ?? "—"} mono />
-                    <InfoRow label="Carts" value="one archive plus one installed copy per cart" />
+                    <InfoRow label={t("settings.storage.library")} value={setupState?.library ?? "—"} mono />
+                    <InfoRow label={t("settings.storage.carts")} value={t("settings.storage.cartsValue")} />
                     <Button size="small" variant="outlined" sx={{ mt: 1.5 }} onClick={handleChangeDirectory}>
-                        Change directory
+                        {t("settings.storage.change")}
                     </Button>
                 </Paper>
 
                 <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
                     <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
                         <MsIcon sx={{ color: "primary.main" }}>memory</MsIcon>
-                        <Typography variant="h6">DOSBox</Typography>
+                        <Typography variant="h6">{t("settings.dosbox.title")}</Typography>
                     </Stack>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        Retrium does not ship DOSBox. Point it at the executable you already have; every cart is
-                        launched from it with its own configuration.
+                        {t("settings.dosbox.body")}
                     </Typography>
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="flex-start">
                         <TextField
-                            label="Executable"
+                            label={t("settings.dosbox.executable")}
                             size="small"
                             fullWidth
                             placeholder="C:\DOSBox\dosbox.exe"
@@ -148,10 +154,10 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                             InputProps={{ sx: { fontFamily: '"IBM Plex Mono", monospace' } }}
                         />
                         <Button onClick={handleBrowse} sx={{ flexShrink: 0 }}>
-                            Browse
+                            {t("common.browse")}
                         </Button>
                         <Button onClick={handleTest} disabled={busy || path.trim().length === 0} sx={{ flexShrink: 0 }}>
-                            Test
+                            {t("common.test")}
                         </Button>
                         <Button
                             variant="contained"
@@ -159,7 +165,7 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                             disabled={busy || path.trim().length === 0 || !dirty}
                             sx={{ flexShrink: 0 }}
                         >
-                            Save
+                            {t("common.save")}
                         </Button>
                     </Stack>
                     {probe !== null && (
@@ -167,11 +173,11 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                             {probe.exists ? (
                                 <Alert severity="success">
                                     {probe.version
-                                        ? `Found DOSBox ${probe.version}`
-                                        : "File found. Version unknown — Retrium will still launch it."}
+                                        ? t("settings.dosbox.found", { version: probe.version })
+                                        : t("settings.dosbox.unknown")}
                                 </Alert>
                             ) : (
-                                <Alert severity="error">No executable at {probe.path}</Alert>
+                                <Alert severity="error">{t("settings.dosbox.missing", { path: probe.path })}</Alert>
                             )}
                         </Box>
                     )}
@@ -180,7 +186,7 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                 <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
                     <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
                         <MsIcon sx={{ color: "primary.main" }}>palette</MsIcon>
-                        <Typography variant="h6">Appearance</Typography>
+                        <Typography variant="h6">{t("settings.appearance.title")}</Typography>
                     </Stack>
                     <Stack direction="row" spacing={1}>
                         {(["dark", "light"] as const).map((themeMode) => (
@@ -205,28 +211,44 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                                     {themeMode === "dark" ? "dark_mode" : "light_mode"}
                                 </MsIcon>
                                 <Typography variant="body2" sx={{ fontWeight: mode === themeMode ? 600 : 400 }}>
-                                    {themeMode === "dark" ? "Terminal night" : "Yellowed manual"}
+                                    {themeMode === "dark"
+                                        ? t("settings.appearance.dark")
+                                        : t("settings.appearance.light")}
                                 </Typography>
                             </Paper>
                         ))}
                     </Stack>
+                    <TextField
+                        select
+                        size="small"
+                        label={t("settings.language")}
+                        value={language}
+                        onChange={(event) => setLanguage(event.target.value as Language)}
+                        sx={{ mt: 2, minWidth: 220 }}
+                    >
+                        {LANGUAGE_OPTIONS.map((option) => (
+                            <MenuItem key={option.value} value={option.value}>
+                                {option.label}
+                            </MenuItem>
+                        ))}
+                    </TextField>
                 </Paper>
 
                 <Paper variant="outlined" sx={{ p: 2.5 }}>
                     <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
                         <MsIcon sx={{ color: "primary.main" }}>info</MsIcon>
-                        <Typography variant="h6">About</Typography>
+                        <Typography variant="h6">{t("settings.about.title")}</Typography>
                     </Stack>
-                    <InfoRow label="Cart format" value="version 1" mono />
-                    <InfoRow label="License" value="GPL-3.0-or-later" mono />
+                    <InfoRow label={t("settings.about.cartFormat")} value={t("settings.about.cartFormatValue")} mono />
+                    <InfoRow label={t("settings.about.license")} value="GPL-3.0-or-later" mono />
                     <InfoRow
-                        label="Homepage"
+                        label={t("settings.about.homepage")}
                         value="https://github.com/garrett-he/retrium"
                         action={
-                            <Tooltip title="Open homepage">
+                            <Tooltip title={t("settings.about.openHomepage")}>
                                 <IconButton
                                     size="small"
-                                    aria-label="Open homepage"
+                                    aria-label={t("settings.about.openHomepage")}
                                     onClick={() =>
                                         openUrl("https://github.com/garrett-he/retrium").catch((error) =>
                                             notify(String(error), "error"),

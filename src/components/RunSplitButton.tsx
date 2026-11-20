@@ -5,6 +5,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useEffect, useState } from "react";
 import { MsIcon } from "@/components/MsIcon";
+import { useT } from "@/i18n";
 import { api } from "@/lib/api";
 import type { LaunchInfo } from "@/types";
 
@@ -25,6 +26,7 @@ interface RunSplitButtonProps {
  * executable.
  */
 export function RunSplitButton({ cartId, running, onRun }: RunSplitButtonProps) {
+    const t = useT();
     const [launch, setLaunch] = useState<LaunchInfo | null>(null);
     const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
@@ -63,11 +65,11 @@ export function RunSplitButton({ cartId, running, onRun }: RunSplitButtonProps) 
                     onClick={() => defaultTarget && onRun(defaultTarget.id)}
                     sx={multi ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : undefined}
                 >
-                    {defaultTarget ? `Run ${defaultTarget.label}` : "Run"}
+                    {defaultTarget ? t("run.withTarget", { target: defaultTarget.label }) : t("run.plain")}
                 </Button>
                 {multi && (
                     <Button
-                        aria-label="Choose target"
+                        aria-label={t("run.chooseTarget")}
                         variant="contained"
                         disabled={disabled}
                         onClick={(event) => setAnchorEl(event.currentTarget)}
@@ -114,7 +116,7 @@ export function RunSplitButton({ cartId, running, onRun }: RunSplitButtonProps) 
                     color="error"
                     sx={{ maxWidth: 320, wordBreak: "break-word" }}
                 >
-                    Launch configuration is invalid: {error}
+                    {t("run.invalid", { error })}
                 </Typography>
             )}
         </Stack>

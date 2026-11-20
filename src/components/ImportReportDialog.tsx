@@ -12,6 +12,7 @@ import { useState } from "react";
 import { MsIcon } from "@/components/MsIcon";
 import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
+import { type StringKey, useT } from "@/i18n";
 import type { ImportDecision, ImportReport, PendingImport } from "@/types";
 
 interface ImportReportDialogProps {
@@ -19,18 +20,18 @@ interface ImportReportDialogProps {
     onClose: () => void;
 }
 
-const ACTION_LABEL: Record<ImportDecision, string> = {
-    upgrade: "Upgrade",
-    conflict: "Replace local",
-    downgrade: "Downgrade anyway",
-    duplicate: "Import anyway",
+const ACTION_KEY: Record<ImportDecision, StringKey> = {
+    upgrade: "import.action.upgrade",
+    conflict: "import.action.conflict",
+    downgrade: "import.action.downgrade",
+    duplicate: "import.action.duplicate",
 };
 
-const DECISION_LABEL: Record<ImportDecision, string> = {
-    upgrade: "newer revision",
-    conflict: "revision conflict",
-    downgrade: "older revision",
-    duplicate: "duplicate content",
+const DECISION_KEY: Record<ImportDecision, StringKey> = {
+    upgrade: "import.decision.upgrade",
+    conflict: "import.decision.conflict",
+    downgrade: "import.decision.downgrade",
+    duplicate: "import.decision.duplicate",
 };
 
 /**
@@ -39,6 +40,7 @@ const DECISION_LABEL: Record<ImportDecision, string> = {
  * being skipped, and only an explicit click applies it.
  */
 export function ImportReportDialog({ report, onClose }: ImportReportDialogProps) {
+    const t = useT();
     const { notify } = useSnackbar();
     const { resolveImport } = useCartsContext();
 
@@ -53,7 +55,10 @@ export function ImportReportDialog({ report, onClose }: ImportReportDialogProps)
         resolveImport(item.archive, "apply")
             .then((cart) => {
                 drop(item);
-                notify(cart ? `${cart.info.name} imported` : "Imported", "success");
+                notify(
+                    cart ? t("import.toast.imported", { name: cart.info.name }) : t("import.toast.importedAnon"),
+                    "success",
+                );
             })
             .catch((err: unknown) => setErrors((map) => ({ ...map, [item.archive]: String(err) })))
             .finally(() => setBusyId(null));
@@ -61,34 +66,38 @@ export function ImportReportDialog({ report, onClose }: ImportReportDialogProps)
 
     return (
         <Dialog open maxWidth="md" fullWidth onClose={onClose}>
-            <DialogTitle>Import results</DialogTitle>
+            <DialogTitle>{t("import.title")}</DialogTitle>
             <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 <Stack direction="row" spacing={1}>
                     <Chip
                         size="small"
                         color="success"
                         variant="outlined"
-                        label={`${report.imported.length} imported`}
+                        label={t("import.chip.imported", { count: report.imported.length })}
                     />
-                    <Chip size="small" variant="outlined" label={`${report.skipped.length} skipped`} />
+                    <Chip
+                        size="small"
+                        variant="outlined"
+                        label={t("import.chip.skipped", { count: report.skipped.length })}
+                    />
                     <Chip
                         size="small"
                         color={pending.length > 0 ? "warning" : "default"}
                         variant="outlined"
-                        label={`${pending.length} need a decision`}
+                        label={t("import.chip.pending", { count: pending.length })}
                     />
                 </Stack>
 
                 {report.imported.length > 0 && (
                     <Box>
                         <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.5 }}>
-                            Added to the library
+                            {t("import.added")}
                         </Typography>
                         {report.imported.map((cart) => (
                             <Stack key={cart.id} direction="row" spacing={1} alignItems="center">
                                 <MsIcon sx={{ fontSize: 16, color: "success.main" }}>check_circle</MsIcon>
                                 <Typography variant="body2">
-                                    {cart.info.name} · revision {cart.revision}
+                                    {t("import.added.row", { name: cart.info.name, revision: cart.revision })}
                                 </Typography>
                             </Stack>
                         ))}
@@ -98,7 +107,7 @@ export function ImportReportDialog({ report, onClose }: ImportReportDialogProps)
                 {report.skipped.length > 0 && (
                     <Box>
                         <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.5 }}>
-                            Refused
+                            {t("import.refused")}
                         </Typography>
                         {report.skipped.map((note) => (
                             <Stack key={note.archive} sx={{ mb: 0.75 }}>
@@ -120,10 +129,10 @@ export function ImportReportDialog({ report, onClose }: ImportReportDialogProps)
                     <>
                         <Divider />
                         <Typography variant="subtitle2" color="text.secondary">
-                            Same cart, different version
+                            {t("import.pending.title")}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                            Nothing here is applied until you choose. Anything you leave alone is skipped.
+                            {t("import.pending.body")}
                         </Typography>
                         {pending.map((item) => (
                             <Box
@@ -132,13 +141,16 @@ export function ImportReportDialog({ report, onClose }: ImportReportDialogProps)
                             >
                                 <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
                                     <Typography sx={{ fontWeight: 600 }}>{item.name}</Typography>
-                                    <Chip size="small" label={DECISION_LABEL[item.decision]} />
+                                    <Chip size="small" label={t(DECISION_KEY[item.decision])} />
                                     <Typography
                                         variant="caption"
                                         color="text.secondary"
                                         sx={{ fontFamily: '"IBM Plex Mono", monospace' }}
                                     >
-                                        r{item.existingRevision ?? "—"} → r{item.incomingRevision}
+                                        {t("import.revisionFlow", {
+                                            from: item.existingRevision ?? "—",
+                                            to: item.incomingRevision,
+                                        })}
                                     </Typography>
                                 </Stack>
                                 <Typography variant="caption" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
@@ -154,7 +166,7 @@ export function ImportReportDialog({ report, onClose }: ImportReportDialogProps)
                                 )}
                                 <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} justifyContent="flex-end">
                                     <Button size="small" disabled={busyId === item.archive} onClick={() => drop(item)}>
-                                        Skip
+                                        {t("common.skip")}
                                     </Button>
                                     <Button
                                         size="small"
@@ -163,7 +175,7 @@ export function ImportReportDialog({ report, onClose }: ImportReportDialogProps)
                                         disabled={busyId === item.archive}
                                         onClick={() => apply(item)}
                                     >
-                                        {ACTION_LABEL[item.decision]}
+                                        {t(ACTION_KEY[item.decision])}
                                     </Button>
                                 </Stack>
                             </Box>
@@ -173,7 +185,7 @@ export function ImportReportDialog({ report, onClose }: ImportReportDialogProps)
             </DialogContent>
             <DialogActions>
                 <Button variant="contained" onClick={onClose}>
-                    Done
+                    {t("common.done")}
                 </Button>
             </DialogActions>
         </Dialog>

@@ -19,6 +19,10 @@ code is written for old carts, old libraries or old config files.
 - `src/pages/` — Library, Cart, Running, Settings and Setup pages.
 - `src/components/` — app shell, sidebar, cards, menus, dialogs, icons.
 - `src/hooks/useCarts.ts` — shared cart/process/launch state.
+- `src/i18n/` — UI strings. `en.ts` is the source of truth; `zh-CN.ts` is typed
+  against it, so a missing or invented key fails `tsc`. The language lives in
+  `localStorage` next to the theme — it is presentation, not app state, and the
+  backend never reads it.
 - `src/lib/api.ts` — typed wrappers around every Tauri command.
 - `src/types/` — frontend types mirroring Rust structs.
 - `src/__mocks__/backend.ts` — fake `invoke` with a default answer per command,

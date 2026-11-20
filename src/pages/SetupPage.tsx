@@ -6,6 +6,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { type FormEvent, useState } from "react";
 import { MsIcon } from "@/components/MsIcon";
+import { type StringKey, useT } from "@/i18n";
 import { api } from "@/lib/api";
 import type { DosboxProbe, SetupState } from "@/types";
 
@@ -15,10 +16,11 @@ interface SetupPageProps {
     onFinished: () => void;
 }
 
-const STEPS = ["Library folder", "DOSBox", "Ready"];
+const STEPS: StringKey[] = ["setup.step.library", "setup.step.dosbox", "setup.step.ready"];
 
 /** Two-step first-run wizard: where carts live, and which DOSBox launches them. */
 export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) {
+    const t = useT();
     const [step, setStep] = useState(0);
     const [library, setLibrary] = useState(defaults.library);
     const [dosbox, setDosbox] = useState(defaults.dosbox);
@@ -69,18 +71,18 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                         terminal
                     </MsIcon>
                     <Typography variant="h4" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
-                        Welcome to Retrium
+                        {t("setup.welcome")}
                     </Typography>
                     <Typography color="text.secondary" align="center">
-                        Two quick answers and your shelf is ready for cart files.
+                        {t("setup.intro")}
                     </Typography>
                 </Stack>
 
                 <Paper sx={{ p: { xs: 3, sm: 4 }, border: "1px solid", borderColor: "divider" }}>
                     <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 4 }}>
-                        {STEPS.map((label, index) => (
+                        {STEPS.map((labelKey, index) => (
                             <Stack
-                                key={label}
+                                key={labelKey}
                                 direction="row"
                                 alignItems="center"
                                 spacing={1}
@@ -128,7 +130,7 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                                             color: index === step ? "text.primary" : "text.secondary",
                                         }}
                                     >
-                                        {label}
+                                        {t(labelKey)}
                                     </Typography>
                                 </Stack>
                             </Stack>
@@ -138,15 +140,14 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                     {step === 0 && (
                         <Stack spacing={2} className="fade-up">
                             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                                Where should Retrium keep your carts?
+                                {t("setup.library.question")}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                Each cart gets an archive and an installed copy here, together with the save files
-                                written during a run.
+                                {t("setup.library.body")}
                             </Typography>
                             <PathField
-                                label="Library directory"
-                                placeholder="e.g. C:\Users\you\Retrium"
+                                label={t("setup.library.label")}
+                                placeholder={t("setup.library.placeholder")}
                                 icon="folder"
                                 value={library}
                                 onChange={setLibrary}
@@ -160,7 +161,7 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                                 onClick={() => setStep(1)}
                                 sx={{ alignSelf: "flex-end", mt: 1 }}
                             >
-                                Continue
+                                {t("setup.continue")}
                             </Button>
                         </Stack>
                     )}
@@ -168,15 +169,14 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                     {step === 1 && (
                         <Stack spacing={2} className="fade-up">
                             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                                Which DOSBox should launch your carts?
+                                {t("setup.dosbox.question")}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                Retrium does not bundle DOSBox. Point it at the executable you already use; you can
-                                change this later in Settings.
+                                {t("setup.dosbox.body")}
                             </Typography>
                             <PathField
-                                label="DOSBox executable"
-                                placeholder="e.g. C:\DOSBox\dosbox.exe"
+                                label={t("setup.dosbox.label")}
+                                placeholder={t("setup.dosbox.placeholder")}
                                 icon="memory"
                                 value={dosbox}
                                 onChange={(value) => {
@@ -190,9 +190,9 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                                 <Typography variant="caption" color={probe.exists ? "success.main" : "error"}>
                                     {probe.exists
                                         ? probe.version
-                                            ? `Found DOSBox ${probe.version}`
-                                            : "File found. Version unknown — Retrium will still launch it."
-                                        : `No executable at ${probe.path}`}
+                                            ? t("settings.dosbox.found", { version: probe.version })
+                                            : t("settings.dosbox.unknown")
+                                        : t("settings.dosbox.missing", { path: probe.path })}
                                 </Typography>
                             )}
                             {error && (
@@ -201,7 +201,7 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                                 </Typography>
                             )}
                             <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1 }}>
-                                <Button onClick={() => setStep(0)}>Back</Button>
+                                <Button onClick={() => setStep(0)}>{t("common.back")}</Button>
                                 <Button
                                     data-testid="start-scan"
                                     variant="contained"
@@ -209,7 +209,7 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                                     disabled={saving || dosbox.trim().length === 0}
                                     onClick={submit}
                                 >
-                                    {saving ? "Saving…" : "Finish setup"}
+                                    {saving ? t("setup.saving") : t("setup.finish")}
                                 </Button>
                             </Stack>
                         </Stack>
@@ -218,14 +218,14 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                     {step === 2 && (
                         <Stack spacing={2} className="fade-up">
                             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                                Your shelf is ready
+                                {t("setup.ready.title")}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                Import a .cart file from the library to put something on it. Anything already in{" "}
+                                {t("setup.ready.before")}
                                 <Box component="span" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
                                     {library}
-                                </Box>{" "}
-                                is picked up automatically.
+                                </Box>
+                                {t("setup.ready.after")}
                             </Typography>
                             <Button
                                 data-testid="enter-library"
@@ -234,7 +234,7 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                                 onClick={onFinished}
                                 sx={{ alignSelf: "flex-end" }}
                             >
-                                Enter library
+                                {t("setup.ready.action")}
                             </Button>
                         </Stack>
                     )}
@@ -255,6 +255,7 @@ interface PathFieldProps {
 }
 
 function PathField({ label, placeholder, icon, value, onChange, onBrowse, onBlur }: PathFieldProps) {
+    const t = useT();
     return (
         <TextField
             label={label}
@@ -269,7 +270,7 @@ function PathField({ label, placeholder, icon, value, onChange, onBrowse, onBlur
                 startAdornment: <MsIcon sx={{ fontSize: 20, mr: 1 }}>{icon}</MsIcon>,
                 endAdornment: (
                     <Button size="small" onClick={onBrowse}>
-                        Browse
+                        {t("common.browse")}
                     </Button>
                 ),
                 sx: { fontFamily: '"IBM Plex Mono", monospace' },

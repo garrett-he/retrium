@@ -7,6 +7,7 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import { type MouseEvent, useState } from "react";
 import { MsIcon } from "@/components/MsIcon";
+import { useT } from "@/i18n";
 import type { Cart, TargetInfo } from "@/types";
 
 export interface CartMenuActions {
@@ -32,6 +33,7 @@ interface CartMenuButtonProps {
 
 /** Kebab menu with quick actions for a cart. */
 export function CartMenuButton({ cart, running, actions, targets = [], iconSize = 18, sx }: CartMenuButtonProps) {
+    const t = useT();
     const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
     const open = (event: MouseEvent<HTMLElement>) => {
@@ -43,7 +45,12 @@ export function CartMenuButton({ cart, running, actions, targets = [], iconSize 
 
     return (
         <>
-            <IconButton size="small" aria-label="Cart menu" onClick={open} sx={{ color: "text.primary", ...sx }}>
+            <IconButton
+                size="small"
+                aria-label={t("cartMenu.open")}
+                onClick={open}
+                sx={{ color: "text.primary", ...sx }}
+            >
                 <MsIcon sx={{ fontSize: iconSize }}>more_vert</MsIcon>
             </IconButton>
             <Menu anchorEl={anchorEl} open={anchorEl !== null} onClose={close}>
@@ -55,7 +62,8 @@ export function CartMenuButton({ cart, running, actions, targets = [], iconSize 
                                   actions.stop?.(cart);
                               }}
                           >
-                              <MsIcon sx={{ fontSize: 18, mr: 1.5, color: "error.main" }}>stop</MsIcon> Stop
+                              <MsIcon sx={{ fontSize: 18, mr: 1.5, color: "error.main" }}>stop</MsIcon>{" "}
+                              {t("common.stop")}
                           </MenuItem>
                       )
                     : actions.run && (
@@ -65,11 +73,14 @@ export function CartMenuButton({ cart, running, actions, targets = [], iconSize 
                                   actions.run?.(cart);
                               }}
                           >
-                              <MsIcon sx={{ fontSize: 18, mr: 1.5, color: "success.main" }}>play_arrow</MsIcon> Run
+                              <MsIcon sx={{ fontSize: 18, mr: 1.5, color: "success.main" }}>play_arrow</MsIcon>{" "}
+                              {t("run.plain")}
                           </MenuItem>
                       )}
                 {!running && actions.run && targets.length > 1 && (
-                    <ListSubheader sx={{ lineHeight: 2, bgcolor: "transparent" }}>Run with…</ListSubheader>
+                    <ListSubheader sx={{ lineHeight: 2, bgcolor: "transparent" }}>
+                        {t("cartMenu.runWith")}
+                    </ListSubheader>
                 )}
                 {!running &&
                     actions.run &&
@@ -100,7 +111,7 @@ export function CartMenuButton({ cart, running, actions, targets = [], iconSize 
                             actions.browse?.(cart);
                         }}
                     >
-                        <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>folder_open</MsIcon> Open folder
+                        <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>folder_open</MsIcon> {t("cartMenu.openFolder")}
                     </MenuItem>
                 )}
                 {actions.exportCart && (
@@ -110,7 +121,7 @@ export function CartMenuButton({ cart, running, actions, targets = [], iconSize 
                             actions.exportCart?.(cart);
                         }}
                     >
-                        <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>io</MsIcon> Export cart…
+                        <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>io</MsIcon> {t("cartMenu.export")}
                     </MenuItem>
                 )}
                 <Divider />
@@ -121,7 +132,7 @@ export function CartMenuButton({ cart, running, actions, targets = [], iconSize 
                             actions.edit?.(cart);
                         }}
                     >
-                        <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>edit</MsIcon> Edit details
+                        <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>edit</MsIcon> {t("cartMenu.edit")}
                     </MenuItem>
                 )}
                 {actions.delete && (
@@ -132,7 +143,7 @@ export function CartMenuButton({ cart, running, actions, targets = [], iconSize 
                         }}
                         sx={{ color: "error.main" }}
                     >
-                        <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>delete</MsIcon> Delete
+                        <MsIcon sx={{ fontSize: 18, mr: 1.5 }}>delete</MsIcon> {t("common.delete")}
                     </MenuItem>
                 )}
             </Menu>

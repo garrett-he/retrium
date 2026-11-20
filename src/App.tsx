@@ -5,6 +5,7 @@ import { createHashRouter, Navigate, RouterProvider } from "react-router-dom";
 import { Layout, LoadingScreen, useThemeMode } from "@/components/Layout";
 import { CartsProvider, useCartsContext } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
+import { I18nProvider } from "@/i18n";
 import { CartPage } from "@/pages/CartPage";
 import { LibraryPage } from "@/pages/LibraryPage";
 import { RunningPage } from "@/pages/RunningPage";
@@ -63,11 +64,13 @@ export function App() {
     return (
         <ThemeProvider theme={theme}>
             <CssBaseline />
-            <SnackbarProvider>
-                <CartsProvider>
-                    <AppContent mode={mode} onModeChange={setMode} />
-                </CartsProvider>
-            </SnackbarProvider>
+            <I18nProvider>
+                <SnackbarProvider>
+                    <CartsProvider>
+                        <AppContent mode={mode} onModeChange={setMode} />
+                    </CartsProvider>
+                </SnackbarProvider>
+            </I18nProvider>
         </ThemeProvider>
     );
 }

@@ -18,6 +18,9 @@ export default defineConfig({
         environment: "jsdom",
         setupFiles: ["./src/test-setup.ts"],
         exclude: ["**/node_modules/**", "**/dist/**", "**/copier-rust-tauri/**"],
+        // Typing into an MUI dialog in jsdom can take seconds; the 5 s default
+        // trips under parallel load even though nothing is actually hanging.
+        testTimeout: 15000,
         coverage: {
             provider: "v8",
             include: ["src/**/*.ts", "src/**/*.tsx"],

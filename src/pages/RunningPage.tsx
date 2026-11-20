@@ -9,11 +9,13 @@ import { CoverArt } from "@/components/CoverArt";
 import { MsIcon } from "@/components/MsIcon";
 import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
+import { useT } from "@/i18n";
 import { formatUptime } from "@/lib/format";
 import type { Cart } from "@/types";
 
 /** Live view of every DOSBox process Retrium is tracking. */
 export function RunningPage() {
+    const t = useT();
     const navigate = useNavigate();
     const { notify } = useSnackbar();
     const { carts, processes, stopCart, stopAllCarts } = useCartsContext();
@@ -28,15 +30,13 @@ export function RunningPage() {
 
     const handleStop = (id: string, name: string) => {
         stopCart(id)
-            .then(() => notify(`${name} stopped`, "info"))
+            .then(() => notify(t("library.toast.stopped", { name }), "info"))
             .catch((error) => notify(String(error), "error"));
     };
 
     const handleStopAll = () => {
         stopAllCarts()
-            .then((count) =>
-                notify(count > 0 ? `Stopped ${count} cart${count > 1 ? "s" : ""}` : "Nothing to stop", "info"),
-            )
+            .then((count) => notify(count > 0 ? t("running.stopped", { count }) : t("running.nothingToStop"), "info"))
             .catch((error) => notify(String(error), "error"));
     };
 
@@ -45,13 +45,11 @@ export function RunningPage() {
             <Box sx={{ px: 3, py: 3, maxWidth: 1200, mx: "auto" }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary">
-                        {processes.length > 0
-                            ? `${processes.length} cart${processes.length > 1 ? "s" : ""} emulated in DOSBox`
-                            : "The CRT is warm, but nothing is running."}
+                        {processes.length > 0 ? t("running.summary", { count: processes.length }) : t("running.idle")}
                     </Typography>
                     {processes.length > 1 && (
                         <Button color="error" startIcon={<MsIcon>stop_circle</MsIcon>} onClick={handleStopAll}>
-                            Stop all
+                            {t("running.stopAll")}
                         </Button>
                     )}
                 </Stack>
@@ -60,13 +58,13 @@ export function RunningPage() {
                     <Paper variant="outlined" sx={{ py: 8, textAlign: "center" }}>
                         <MsIcon sx={{ fontSize: 44, color: "text.secondary" }}>monitor</MsIcon>
                         <Typography variant="h6" sx={{ mt: 1 }}>
-                            Nothing is running
+                            {t("running.empty.title")}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            Launch a cart from the library to see it here.
+                            {t("running.empty.body")}
                         </Typography>
                         <Button variant="contained" onClick={() => navigate("/")}>
-                            Go to library
+                            {t("running.empty.action")}
                         </Button>
                     </Paper>
                 ) : (
@@ -88,7 +86,7 @@ export function RunningPage() {
                                             color="text.secondary"
                                             sx={{ fontFamily: '"IBM Plex Mono", monospace' }}
                                         >
-                                            pid {process.pid} · {process.targetLabel}
+                                            {t("running.pid", { pid: process.pid, target: process.targetLabel })}
                                         </Typography>
                                     </Box>
                                     <Stack direction="row" spacing={0.5} alignItems="center">
@@ -110,7 +108,7 @@ export function RunningPage() {
                                         startIcon={<MsIcon>stop</MsIcon>}
                                         onClick={() => handleStop(process.cartId, name)}
                                     >
-                                        Stop
+                                        {t("common.stop")}
                                     </Button>
                                 </Paper>
                             );

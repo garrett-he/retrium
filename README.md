@@ -26,6 +26,7 @@
 - **Import and export** — export a cart as a `.cart` archive and import it into any library, with an explicit decision for upgrades, conflicts and downgrades.
 - **First-run setup** — pick a library folder and a DOSBox executable on first start; both can be changed later.
 - **Themes** — dark and light modes.
+- **English or Simplified Chinese** — the interface language is a setting, remembered across launches.
 
 ## Requirements
 

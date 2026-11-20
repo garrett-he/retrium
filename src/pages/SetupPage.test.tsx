@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
+import { I18nProvider } from "@/i18n";
 import { SetupPage } from "./SetupPage";
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -16,9 +17,11 @@ const defaults = {
 
 function renderPage(onComplete = vi.fn().mockResolvedValue(undefined), onFinished = vi.fn()) {
     render(
-        <SnackbarProvider>
-            <SetupPage defaults={defaults} onComplete={onComplete} onFinished={onFinished} />
-        </SnackbarProvider>,
+        <I18nProvider>
+            <SnackbarProvider>
+                <SetupPage defaults={defaults} onComplete={onComplete} onFinished={onFinished} />
+            </SnackbarProvider>
+        </I18nProvider>,
     );
     return { onComplete, onFinished };
 }
@@ -27,12 +30,21 @@ describe("SetupPage", () => {
     beforeEach(() => {
         invoke.mockReset();
         invoke.mockResolvedValue(null);
+        localStorage.removeItem("retrium-language");
     });
 
     it("prefills the default paths", () => {
         renderPage();
         expect(screen.getByLabelText("Library directory")).toHaveValue(defaults.library);
         expect(screen.queryByLabelText("DOSBox executable")).toBeNull();
+    });
+
+    it("speaks the language chosen on a previous run", () => {
+        localStorage.setItem("retrium-language", "zh-CN");
+        renderPage();
+        expect(screen.getByText("欢迎使用 Retrium")).toBeTruthy();
+        expect(screen.getByTestId("continue")).toHaveTextContent("继续");
+        expect(document.documentElement.lang).toBe("zh-CN");
     });
 
     it("disables continue until the library path is present", async () => {

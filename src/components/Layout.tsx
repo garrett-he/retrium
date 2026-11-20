@@ -8,21 +8,23 @@ import { MsIcon } from "@/components/MsIcon";
 import { Sidebar } from "@/components/Sidebar";
 import { TopBar } from "@/components/TopBar";
 import { useCartsContext } from "@/hooks/useCarts";
+import { type StringKey, useT } from "@/i18n";
 import type { ThemeMode } from "@/theme";
 
-const TITLES: Record<string, string> = {
-    "/": "Library",
-    "/running": "Running",
-    "/settings": "Settings",
+const TITLES: Record<string, StringKey> = {
+    "/": "nav.library",
+    "/running": "nav.running",
+    "/settings": "nav.settings",
 };
 
 /** App shell with sidebar, contextual top bar and routed content. */
 export function Layout({ mode, onModeChange }: { mode: ThemeMode; onModeChange: (mode: ThemeMode) => void }) {
+    const t = useT();
     const { processes, refresh } = useCartsContext();
     const { pathname } = useLocation();
     const cartDetail = pathname.startsWith("/carts/");
 
-    const title = cartDetail ? "Cart" : (TITLES[pathname] ?? "Library");
+    const title = cartDetail ? t("nav.cart") : t(TITLES[pathname] ?? "nav.library");
 
     return (
         <Box sx={{ display: "flex", minHeight: "100vh" }}>

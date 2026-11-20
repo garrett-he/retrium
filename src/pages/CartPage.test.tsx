@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { doom, makeBackend, oneTarget, processFor } from "@/__mocks__/backend";
 import { CartsProvider } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
+import { I18nProvider } from "@/i18n";
 import { formatDateTime } from "@/lib/format";
 import type { Cart } from "@/types";
 import { CartPage } from "./CartPage";
@@ -15,16 +16,18 @@ vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: vi.fn((p: string) => p)
 
 function renderPage() {
     return render(
-        <MemoryRouter initialEntries={[`/carts/${doom.id}`]}>
-            <SnackbarProvider>
-                <CartsProvider>
-                    <Routes>
-                        <Route path="/carts/:id" element={<CartPage />} />
-                        <Route path="/" element={<div>library home</div>} />
-                    </Routes>
-                </CartsProvider>
-            </SnackbarProvider>
-        </MemoryRouter>,
+        <I18nProvider>
+            <MemoryRouter initialEntries={[`/carts/${doom.id}`]}>
+                <SnackbarProvider>
+                    <CartsProvider>
+                        <Routes>
+                            <Route path="/carts/:id" element={<CartPage />} />
+                            <Route path="/" element={<div>library home</div>} />
+                        </Routes>
+                    </CartsProvider>
+                </SnackbarProvider>
+            </MemoryRouter>
+        </I18nProvider>,
     );
 }
 
@@ -239,15 +242,17 @@ describe("CartPage", () => {
     it("shows a fallback when the cart is unknown", async () => {
         invoke.mockImplementation(makeBackend({ carts: [] as Cart[] }));
         render(
-            <MemoryRouter initialEntries={["/carts/missing"]}>
-                <SnackbarProvider>
-                    <CartsProvider>
-                        <Routes>
-                            <Route path="/carts/:id" element={<CartPage />} />
-                        </Routes>
-                    </CartsProvider>
-                </SnackbarProvider>
-            </MemoryRouter>,
+            <I18nProvider>
+                <MemoryRouter initialEntries={["/carts/missing"]}>
+                    <SnackbarProvider>
+                        <CartsProvider>
+                            <Routes>
+                                <Route path="/carts/:id" element={<CartPage />} />
+                            </Routes>
+                        </CartsProvider>
+                    </SnackbarProvider>
+                </MemoryRouter>
+            </I18nProvider>,
         );
         expect(await screen.findByText("Cart not found")).toBeTruthy();
     });

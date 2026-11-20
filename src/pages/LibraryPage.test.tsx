@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { civilization, doom, makeBackend, processFor, wolfenstein } from "@/__mocks__/backend";
 import { CartsProvider } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
+import { I18nProvider } from "@/i18n";
 import type { ImportReport } from "@/types";
 import { LibraryPage } from "./LibraryPage";
 
@@ -30,16 +31,18 @@ const report: ImportReport = {
 
 function renderPage() {
     return render(
-        <MemoryRouter>
-            <SnackbarProvider>
-                <CartsProvider>
-                    <Routes>
-                        <Route path="/" element={<LibraryPage />} />
-                        <Route path="/carts/:id" element={<div>detail view</div>} />
-                    </Routes>
-                </CartsProvider>
-            </SnackbarProvider>
-        </MemoryRouter>,
+        <I18nProvider>
+            <MemoryRouter>
+                <SnackbarProvider>
+                    <CartsProvider>
+                        <Routes>
+                            <Route path="/" element={<LibraryPage />} />
+                            <Route path="/carts/:id" element={<div>detail view</div>} />
+                        </Routes>
+                    </CartsProvider>
+                </SnackbarProvider>
+            </MemoryRouter>
+        </I18nProvider>,
     );
 }
 
@@ -72,7 +75,7 @@ describe("LibraryPage", () => {
         await screen.findByText("Doom");
 
         await user.click(screen.getByRole("combobox", { name: "Category" }));
-        await user.click(await screen.findByRole("option", { name: "demo" }));
+        await user.click(await screen.findByRole("option", { name: "Demo" }));
 
         expect(screen.queryByText("Doom")).toBeNull();
         expect(screen.getByText("Wolfenstein 3D")).toBeTruthy();

@@ -21,6 +21,7 @@ import { RunningChip } from "@/components/RunningChip";
 import { RunSplitButton } from "@/components/RunSplitButton";
 import { useCartsContext, useRunning } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
+import { categoryLabel, type TFunction, useT } from "@/i18n";
 import { api } from "@/lib/api";
 import { formatDateTime, formatPlaytime } from "@/lib/format";
 import type { Author, CartInfo } from "@/types";
@@ -29,6 +30,7 @@ type ConfirmAction = "reset" | "repair" | "delete";
 
 /** Cart detail: hero, run controls, stats, metadata, editing and lifecycle. */
 export function CartPage() {
+    const t = useT();
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { notify } = useSnackbar();
@@ -46,12 +48,12 @@ export function CartPage() {
         return (
             <Box className="fade-up">
                 <Box sx={{ px: 3, py: 6, textAlign: "center" }}>
-                    <Typography variant="h5">Cart not found</Typography>
+                    <Typography variant="h5">{t("cart.notFound.title")}</Typography>
                     <Typography color="text.secondary" sx={{ mb: 2 }}>
-                        The requested cart could not be found.
+                        {t("cart.notFound.body")}
                     </Typography>
                     <Button variant="contained" onClick={() => navigate("/")}>
-                        Back to library
+                        {t("cart.notFound.action")}
                     </Button>
                 </Box>
             </Box>
@@ -61,44 +63,48 @@ export function CartPage() {
     const info = cart.info;
     const summary = cart.summary;
     const statCards = [
-        { icon: "event", label: "Last run", value: summary ? formatDateTime(summary.lastRun) : "—" },
-        { icon: "schedule", label: "Total playtime", value: summary ? formatPlaytime(summary.elapsed) : "—" },
-        { icon: "replay", label: "Times played", value: summary ? `${summary.runs}×` : "—" },
+        { icon: "event", label: t("cart.stat.lastRun"), value: summary ? formatDateTime(summary.lastRun) : "—" },
+        {
+            icon: "schedule",
+            label: t("cart.stat.playtime"),
+            value: summary ? formatPlaytime(summary.elapsed) : "—",
+        },
+        { icon: "replay", label: t("cart.stat.runs"), value: summary ? `${summary.runs}×` : "—" },
     ];
     const infoRows: Array<[string, string | number | undefined]> = [
-        ["Category", info.category],
-        ["Release", info.release],
-        ["Language", info.language],
-        ["Players", info.players],
-        ["Platform", info.platform],
-        ["DOS", info.dos?.version],
+        [t("cart.info.category"), info.category === undefined ? undefined : categoryLabel(t, info.category)],
+        [t("cart.info.release"), info.release],
+        [t("cart.info.language"), info.language],
+        [t("cart.info.players"), info.players],
+        [t("cart.info.platform"), info.platform],
+        [t("cart.info.dos"), info.dos?.version],
     ];
     const extraRows: Array<[string, string | number | undefined, boolean?]> = [
-        ["Developer", info.developer],
-        ["Publisher", info.publisher],
-        ["Series", info.series],
-        ["Author", cart.author?.name],
-        ["Created", formatDateTime(cart.createdAt)],
-        ["Revision", cart.revision],
-        ["Cart id", cart.id, true],
+        [t("cart.meta.developer"), info.developer],
+        [t("cart.meta.publisher"), info.publisher],
+        [t("cart.meta.series"), info.series],
+        [t("cart.meta.author"), cart.author?.name],
+        [t("cart.meta.created"), formatDateTime(cart.createdAt)],
+        [t("cart.meta.revision"), cart.revision],
+        [t("cart.meta.id"), cart.id, true],
     ];
 
     const handleStop = () => {
         stopCart(cart.id)
-            .then(() => notify(`${info.name} stopped`, "info"))
+            .then(() => notify(t("library.toast.stopped", { name: info.name }), "info"))
             .catch((error) => notify(String(error), "error"));
     };
 
     const handleBrowse = () => {
         api.openCartFolder(cart.id)
-            .then(() => notify(`Opened ${info.name} folder`, "info"))
+            .then(() => notify(t("library.toast.opened", { name: info.name }), "info"))
             .catch((error) => notify(String(error), "error"));
     };
 
     const handleSave = (targetId: string, updatedInfo: CartInfo, author?: Author) => {
         setEditing(false);
         return saveCartInfo(targetId, updatedInfo, author)
-            .then(() => notify("Metadata saved", "success"))
+            .then(() => notify(t("cart.toast.metadataSaved"), "success"))
             .catch((error) => notify(String(error), "error"));
     };
 
@@ -111,15 +117,15 @@ export function CartPage() {
         if (action === "delete") {
             deleteCart(cart.id)
                 .then(() => {
-                    notify(`${info.name} deleted`, "info");
+                    notify(t("library.toast.deleted", { name: info.name }), "info");
                     navigate("/");
                 })
                 .catch((error) => notify(String(error), "error"));
             return;
         }
         const work = action === "reset" ? resetCart(cart.id) : repairCart(cart.id);
-        work.then(() => notify(action === "reset" ? "Progress reset" : "Program repaired", "success")).catch((error) =>
-            notify(String(error), "error"),
+        work.then(() => notify(t(action === "reset" ? "cart.toast.reset" : "cart.toast.repaired"), "success")).catch(
+            (error) => notify(String(error), "error"),
         );
     };
 
@@ -131,7 +137,7 @@ export function CartPage() {
                     onClick={() => navigate("/")}
                     sx={{ mb: 2, color: "text.secondary" }}
                 >
-                    Library
+                    {t("nav.library")}
                 </Button>
 
                 <Box sx={{ position: "relative", mb: 3 }}>
@@ -156,7 +162,11 @@ export function CartPage() {
                                 variant="body2"
                                 sx={{ color: "rgba(236,229,218,0.85)", fontFamily: '"IBM Plex Mono", monospace' }}
                             >
-                                {info.release ?? "—"} · {info.category ?? "Uncategorized"} · {info.developer ?? "—"}
+                                {t("cart.hero.meta", {
+                                    release: info.release ?? "—",
+                                    category: categoryLabel(t, info.category),
+                                    developer: info.developer ?? "—",
+                                })}
                             </Typography>
                             <RevisionBadge revision={cart.revision} dirty={cart.dirty} />
                         </Stack>
@@ -176,7 +186,7 @@ export function CartPage() {
                             startIcon={<MsIcon>stop</MsIcon>}
                             onClick={handleStop}
                         >
-                            Stop
+                            {t("common.stop")}
                         </Button>
                     ) : (
                         <RunSplitButton
@@ -185,20 +195,26 @@ export function CartPage() {
                             onRun={(targetId) =>
                                 runCart(cart.id, targetId)
                                     .then((started) =>
-                                        notify(`Launched ${info.name} · ${started.targetLabel}`, "success"),
+                                        notify(
+                                            t("library.toast.launched", {
+                                                name: info.name,
+                                                target: started.targetLabel,
+                                            }),
+                                            "success",
+                                        ),
                                     )
                                     .catch((error) => notify(String(error), "error"))
                             }
                         />
                     )}
                     <Button variant="outlined" startIcon={<MsIcon>folder_open</MsIcon>} onClick={handleBrowse}>
-                        Browse
+                        {t("common.browse")}
                     </Button>
                     <Button variant="outlined" startIcon={<MsIcon>io</MsIcon>} onClick={() => setExporting(true)}>
-                        Export…
+                        {t("cart.action.export")}
                     </Button>
                     <Button variant="outlined" startIcon={<MsIcon>edit</MsIcon>} onClick={() => setEditing(true)}>
-                        Edit
+                        {t("cart.action.edit")}
                     </Button>
                     <Button
                         variant="outlined"
@@ -207,7 +223,7 @@ export function CartPage() {
                         onClick={() => setConfirming("delete")}
                         sx={{ ml: "auto" }}
                     >
-                        Delete
+                        {t("common.delete")}
                     </Button>
                 </Stack>
 
@@ -234,7 +250,7 @@ export function CartPage() {
                 <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "1.1fr 1.4fr" }, mb: 2 }}>
                     <Paper variant="outlined" sx={{ p: 2.5 }}>
                         <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
-                            Information
+                            {t("cart.info.title")}
                         </Typography>
                         {infoRows.map(([key, value]) => (
                             <InfoRow key={key} label={key} value={value} />
@@ -242,7 +258,7 @@ export function CartPage() {
                     </Paper>
                     <Paper variant="outlined" sx={{ p: 2.5 }}>
                         <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
-                            Cart
+                            {t("cart.meta.title")}
                         </Typography>
                         {extraRows.map(([key, value, mono]) => (
                             <InfoRow key={key} label={key} value={value} mono={mono === true} />
@@ -255,7 +271,7 @@ export function CartPage() {
                     <Stack spacing={2}>
                         <Paper variant="outlined" sx={{ p: 2.5 }}>
                             <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1.5 }}>
-                                Tags
+                                {t("cart.tags")}
                             </Typography>
                             <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
                                 {(info.tags ?? []).length === 0 ? (
@@ -281,11 +297,10 @@ export function CartPage() {
                         </Paper>
                         <Paper variant="outlined" sx={{ p: 2.5 }}>
                             <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-                                Repair
+                                {t("cart.repair.title")}
                             </Typography>
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                                Reset throws the working copy and every save file away. Repair re-extracts the program
-                                but keeps the save files written since the last import.
+                                {t("cart.repair.body")}
                             </Typography>
                             <Stack direction="row" spacing={1}>
                                 <Button
@@ -294,7 +309,7 @@ export function CartPage() {
                                     disabled={running}
                                     onClick={() => setConfirming("reset")}
                                 >
-                                    Reset progress
+                                    {t("cart.repair.reset")}
                                 </Button>
                                 <Button
                                     size="small"
@@ -302,7 +317,7 @@ export function CartPage() {
                                     disabled={running}
                                     onClick={() => setConfirming("repair")}
                                 >
-                                    Repair program
+                                    {t("cart.repair.repair")}
                                 </Button>
                             </Stack>
                         </Paper>
@@ -319,14 +334,14 @@ export function CartPage() {
             <ExportDialog cart={exporting ? cart : null} onClose={() => setExporting(false)} />
 
             <Dialog open={confirming !== null} onClose={() => setConfirming(null)}>
-                <DialogTitle>{confirmTitle(confirming, info.name)}</DialogTitle>
+                <DialogTitle>{confirmTitle(t, confirming, info.name)}</DialogTitle>
                 <DialogContent>
-                    <DialogContentText>{confirmBody(confirming)}</DialogContentText>
+                    <DialogContentText>{confirmBody(t, confirming)}</DialogContentText>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setConfirming(null)}>Cancel</Button>
+                    <Button onClick={() => setConfirming(null)}>{t("common.cancel")}</Button>
                     <Button color="error" variant="contained" onClick={runConfirm}>
-                        {confirmButton(confirming)}
+                        {confirmButton(t, confirming)}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -334,46 +349,47 @@ export function CartPage() {
     );
 }
 
-function confirmTitle(action: ConfirmAction | null, name: string): string {
+function confirmTitle(t: TFunction, action: ConfirmAction | null, name: string): string {
     switch (action) {
         case "delete":
-            return `Delete “${name}”?`;
+            return t("cart.confirm.delete.title", { name });
         case "reset":
-            return "Reset progress?";
+            return t("cart.confirm.reset.title");
         case "repair":
-            return "Repair program files?";
+            return t("cart.confirm.repair.title");
         default:
             return "";
     }
 }
 
-function confirmBody(action: ConfirmAction | null): string {
+function confirmBody(t: TFunction, action: ConfirmAction | null): string {
     switch (action) {
         case "delete":
-            return "The archive, the installed copy and every save file written during a run will be removed. This cannot be undone.";
+            return t("library.delete.body");
         case "reset":
-            return "The installed program and all save files are discarded and re-extracted from the archive. Local changes that were never exported are lost.";
+            return t("cart.confirm.reset.body");
         case "repair":
-            return "Program files are re-extracted from the archive. Save files written during a run are put back afterwards.";
+            return t("cart.confirm.repair.body");
         default:
             return "";
     }
 }
 
-function confirmButton(action: ConfirmAction | null): string {
+function confirmButton(t: TFunction, action: ConfirmAction | null): string {
     switch (action) {
         case "delete":
-            return "Delete permanently";
+            return t("cart.confirm.delete.button");
         case "reset":
-            return "Reset";
+            return t("cart.confirm.reset.button");
         case "repair":
-            return "Repair";
+            return t("cart.confirm.repair.button");
         default:
             return "";
     }
 }
 
 function RevisionBadge({ revision, dirty }: { revision: number; dirty?: boolean }) {
+    const t = useT();
     return (
         <Stack direction="row" spacing={0.5} alignItems="center">
             <Chip
@@ -388,11 +404,11 @@ function RevisionBadge({ revision, dirty }: { revision: number; dirty?: boolean 
                 }}
             />
             {dirty && (
-                <Tooltip title="Local changes have not been exported yet">
+                <Tooltip title={t("cart.dirty.tooltip")}>
                     <Chip
                         size="small"
                         icon={<MsIcon sx={{ fontSize: 14 }}>edit_note</MsIcon>}
-                        label="unexported"
+                        label={t("cart.dirty.unexported")}
                         sx={{
                             height: 20,
                             fontSize: 11,

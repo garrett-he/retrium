@@ -4,6 +4,7 @@ import Toolbar from "@mui/material/Toolbar";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { MsIcon } from "@/components/MsIcon";
+import { useT } from "@/i18n";
 
 interface TopBarProps {
     title: string;
@@ -12,6 +13,7 @@ interface TopBarProps {
 
 /** Sticky application top bar with the current section title and refresh action. */
 export function TopBar({ title, onRefresh }: TopBarProps) {
+    const t = useT();
     return (
         <AppBar
             position="sticky"
@@ -29,8 +31,12 @@ export function TopBar({ title, onRefresh }: TopBarProps) {
                 <Typography variant="h6" noWrap component="div" sx={{ mr: "auto" }}>
                     {title}
                 </Typography>
-                <Tooltip title="Rescan library folder">
-                    <IconButton aria-label="Rescan" onClick={onRefresh} sx={{ color: "text.secondary" }}>
+                <Tooltip title={t("topbar.rescan")}>
+                    <IconButton
+                        aria-label={t("topbar.rescanShort")}
+                        onClick={onRefresh}
+                        sx={{ color: "text.secondary" }}
+                    >
                         <MsIcon>refresh</MsIcon>
                     </IconButton>
                 </Tooltip>
