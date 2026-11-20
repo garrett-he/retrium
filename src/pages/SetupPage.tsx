@@ -1,14 +1,13 @@
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { MsIcon } from "@/components/MsIcon";
 import { api } from "@/lib/api";
-import type { SetupState } from "@/types";
+import type { DosboxProbe, SetupState } from "@/types";
 
 interface SetupPageProps {
     defaults: SetupState;
@@ -16,27 +15,16 @@ interface SetupPageProps {
     onFinished: () => void;
 }
 
-const STEPS = ["Library folder", "DOSBox", "Scan"];
+const STEPS = ["Library folder", "DOSBox", "Ready"];
 
-/** Three-step first-run wizard: library directory, DOSBox executable, initial scan. */
+/** Two-step first-run wizard: where carts live, and which DOSBox launches them. */
 export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) {
     const [step, setStep] = useState(0);
     const [library, setLibrary] = useState(defaults.library);
     const [dosbox, setDosbox] = useState(defaults.dosbox);
+    const [probe, setProbe] = useState<DosboxProbe | null>(null);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [progress, setProgress] = useState(0);
-
-    useEffect(() => {
-        if (step !== 2) {
-            return;
-        }
-        setProgress(0);
-        const timer = setInterval(() => {
-            setProgress((value) => Math.min(100, value + 10));
-        }, 60);
-        return () => clearInterval(timer);
-    }, [step]);
 
     const pick = async (picker: () => Promise<string | null>, setValue: (value: string) => void) => {
         try {
@@ -49,12 +37,22 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
         }
     };
 
+    const testDosbox = () => {
+        const path = dosbox.trim();
+        if (path.length === 0) {
+            return;
+        }
+        api.probeDosboxPath(path)
+            .then(setProbe)
+            .catch((err: unknown) => setError(String(err)));
+    };
+
     const submit = async (event: FormEvent) => {
         event.preventDefault();
         setSaving(true);
         setError(null);
         try {
-            await onComplete(library, dosbox);
+            await onComplete(library.trim(), dosbox.trim());
             setStep(2);
         } catch (err) {
             setError(String(err));
@@ -74,7 +72,7 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                         Welcome to Retrium
                     </Typography>
                     <Typography color="text.secondary" align="center">
-                        Three quick steps and your shelf of old carts is ready.
+                        Two quick answers and your shelf is ready for cart files.
                     </Typography>
                 </Stack>
 
@@ -143,7 +141,8 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                                 Where should Retrium keep your carts?
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                Each cart gets its own sub-folder here, together with saved states and metadata.
+                                Each cart gets an archive and an installed copy here, together with the save files
+                                written during a run.
                             </Typography>
                             <PathField
                                 label="Library directory"
@@ -172,17 +171,30 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                                 Which DOSBox should launch your carts?
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                Point to DOSBox.exe (or the binary on macOS/Linux). More versions can be added later in
-                                Settings.
+                                Retrium does not bundle DOSBox. Point it at the executable you already use; you can
+                                change this later in Settings.
                             </Typography>
                             <PathField
                                 label="DOSBox executable"
                                 placeholder="e.g. C:\DOSBox\dosbox.exe"
                                 icon="memory"
                                 value={dosbox}
-                                onChange={setDosbox}
+                                onChange={(value) => {
+                                    setDosbox(value);
+                                    setProbe(null);
+                                }}
                                 onBrowse={() => pick(api.pickDosboxExecutable, setDosbox)}
+                                onBlur={testDosbox}
                             />
+                            {probe !== null && (
+                                <Typography variant="caption" color={probe.exists ? "success.main" : "error"}>
+                                    {probe.exists
+                                        ? probe.version
+                                            ? `Found DOSBox ${probe.version}`
+                                            : "File found. Version unknown — Retrium will still launch it."
+                                        : `No executable at ${probe.path}`}
+                                </Typography>
+                            )}
                             {error && (
                                 <Typography role="alert" variant="body2" color="error">
                                     {error}
@@ -197,7 +209,7 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                                     disabled={saving || dosbox.trim().length === 0}
                                     onClick={submit}
                                 >
-                                    {saving ? "Saving…" : "Start scan"}
+                                    {saving ? "Saving…" : "Finish setup"}
                                 </Button>
                             </Stack>
                         </Stack>
@@ -206,29 +218,23 @@ export function SetupPage({ defaults, onComplete, onFinished }: SetupPageProps) 
                     {step === 2 && (
                         <Stack spacing={2} className="fade-up">
                             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                                Scanning your library…
+                                Your shelf is ready
                             </Typography>
-                            <LinearProgress
-                                variant="determinate"
-                                value={progress}
-                                sx={{ height: 8, borderRadius: "4px" }}
-                            />
-                            <Typography
-                                variant="body2"
-                                color="text.secondary"
-                                sx={{ fontFamily: '"IBM Plex Mono", monospace' }}
-                            >
-                                Discovering carts in {library}…
+                            <Typography variant="body2" color="text.secondary">
+                                Import a .cart file from the library to put something on it. Anything already in{" "}
+                                <Box component="span" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
+                                    {library}
+                                </Box>{" "}
+                                is picked up automatically.
                             </Typography>
                             <Button
                                 data-testid="enter-library"
                                 variant="contained"
                                 size="large"
-                                disabled={progress < 100}
                                 onClick={onFinished}
                                 sx={{ alignSelf: "flex-end" }}
                             >
-                                {progress < 100 ? "Scanning…" : "Enter library"}
+                                Enter library
                             </Button>
                         </Stack>
                     )}
@@ -245,9 +251,10 @@ interface PathFieldProps {
     value: string;
     onChange: (value: string) => void;
     onBrowse: () => void;
+    onBlur?: () => void;
 }
 
-function PathField({ label, placeholder, icon, value, onChange, onBrowse }: PathFieldProps) {
+function PathField({ label, placeholder, icon, value, onChange, onBrowse, onBlur }: PathFieldProps) {
     return (
         <TextField
             label={label}
@@ -257,6 +264,7 @@ function PathField({ label, placeholder, icon, value, onChange, onBrowse }: Path
             placeholder={placeholder}
             value={value}
             onChange={(event) => onChange(event.target.value)}
+            onBlur={onBlur}
             InputProps={{
                 startAdornment: <MsIcon sx={{ fontSize: 20, mr: 1 }}>{icon}</MsIcon>,
                 endAdornment: (

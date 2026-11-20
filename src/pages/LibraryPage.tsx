@@ -23,18 +23,20 @@ import { useMemo, useState } from "react";
 import { CartCard } from "@/components/CartCard";
 import type { CartMenuActions } from "@/components/CartMenu";
 import { CartRow } from "@/components/CartRow";
+import { ExportDialog } from "@/components/ExportDialog";
+import { ImportReportDialog } from "@/components/ImportReportDialog";
 import { MsIcon } from "@/components/MsIcon";
 import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
 import { api } from "@/lib/api";
-import type { Cart } from "@/types";
+import type { Cart, ImportReport } from "@/types";
 
 type SortKey = "recent" | "name" | "year";
 
 /** Library home: stats overview, search, filters, grid/list views and quick actions. */
 export function LibraryPage() {
     const { notify } = useSnackbar();
-    const { carts, processes, summaries, runCart, stopCart, addCarts, refresh } = useCartsContext();
+    const { carts, processes, launch, loadLaunch, runCart, stopCart, deleteCart, addCarts } = useCartsContext();
 
     const [query, setQuery] = useState("");
     const [category, setCategory] = useState("All");
@@ -42,8 +44,10 @@ export function LibraryPage() {
     const [view, setView] = useState<"grid" | "list">("grid");
     const [adding, setAdding] = useState(false);
     const [deleting, setDeleting] = useState<Cart | null>(null);
+    const [exporting, setExporting] = useState<Cart | null>(null);
+    const [report, setReport] = useState<ImportReport | null>(null);
 
-    const runningIds = useMemo(() => new Set(processes.map((process) => process.cart.id)), [processes]);
+    const runningIds = useMemo(() => new Set(processes.map((process) => process.cartId)), [processes]);
 
     const filtered = useMemo(() => {
         const needle = query.trim().toLowerCase();
@@ -59,35 +63,38 @@ export function LibraryPage() {
             if (sort === "year") {
                 return (a.info.release ?? 0) - (b.info.release ?? 0);
             }
-            return (summaries[b.id]?.lastRun ?? "").localeCompare(summaries[a.id]?.lastRun ?? "");
+            return (b.summary?.lastRun ?? "").localeCompare(a.summary?.lastRun ?? "");
         });
-    }, [carts, query, category, sort, summaries]);
+    }, [carts, query, category, sort]);
 
     const categories = useMemo(() => {
         const values = new Set(carts.map((cart) => cart.info.category ?? "Uncategorized"));
         return ["All", ...[...values].sort((a, b) => a.localeCompare(b))];
     }, [carts]);
 
+    const handleRun = (cart: Cart, targetId?: string) => {
+        runCart(cart.id, targetId)
+            .then((process) => notify(`Launched ${cart.info.name} · ${process.targetLabel}`, "success"))
+            .catch((error) => notify(String(error), "error"));
+    };
+
     const actions: CartMenuActions = {
-        run: (cart) => {
-            runCart(cart)
-                .then(() => notify(`Launched ${cart.info.name} in DOSBox`, "success"))
-                .catch((error) => notify(String(error), "error"));
-        },
+        run: handleRun,
         stop: (cart) => {
-            stopCart(cart)
+            stopCart(cart.id)
                 .then(() => notify(`${cart.info.name} stopped`, "info"))
                 .catch((error) => notify(String(error), "error"));
         },
         browse: (cart) => {
-            api.openCartFolder(cart)
-                .then(() => notify(`Opened ${cart.dir}`, "info"))
+            api.openCartFolder(cart.id)
+                .then(() => notify(`Opened ${cart.info.name} folder`, "info"))
                 .catch((error) => notify(String(error), "error"));
         },
-        exportArchive: (cart) => {
-            api.archiveCart(cart)
-                .then(() => notify(`Exported ${cart.info.name}.cart`, "success"))
-                .catch((error) => notify(String(error), "error"));
+        exportCart: (cart) => setExporting(cart),
+        loadTargets: (cart) => {
+            if (!launch[cart.id]) {
+                loadLaunch(cart.id).catch((error) => notify(String(error), "error"));
+            }
         },
         delete: (cart) => setDeleting(cart),
     };
@@ -98,8 +105,7 @@ export function LibraryPage() {
         if (!cart) {
             return;
         }
-        api.deleteCart(cart)
-            .then(() => refresh())
+        deleteCart(cart.id)
             .then(() => notify(`${cart.info.name} deleted`, "info"))
             .catch((error) => notify(String(error), "error"));
     };
@@ -107,9 +113,13 @@ export function LibraryPage() {
     const handleAdd = () => {
         setAdding(true);
         addCarts()
-            .then((added) =>
-                notify(added.length > 0 ? `${added.length} new carts added` : "No new carts found", "success"),
-            )
+            .then((result) => {
+                if (result.imported.length === 0 && result.skipped.length === 0 && result.pending.length === 0) {
+                    notify("No carts selected", "info");
+                    return;
+                }
+                setReport(result);
+            })
             .catch((error) => notify(String(error), "error"))
             .finally(() => setAdding(false));
     };
@@ -194,7 +204,20 @@ export function LibraryPage() {
                     </Tooltip>
                 </Stack>
 
-                {filtered.length === 0 ? (
+                {carts.length === 0 ? (
+                    <Paper variant="outlined" sx={{ py: 8, textAlign: "center" }}>
+                        <MsIcon sx={{ fontSize: 44, color: "text.secondary" }}>inventory_2</MsIcon>
+                        <Typography variant="h6" sx={{ mt: 1 }}>
+                            The shelf is empty
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Import a .cart file to put something on it.
+                        </Typography>
+                        <Button variant="contained" disabled={adding} onClick={handleAdd}>
+                            Import .cart
+                        </Button>
+                    </Paper>
+                ) : filtered.length === 0 ? (
                     <Paper variant="outlined" sx={{ py: 8, textAlign: "center" }}>
                         <MsIcon sx={{ fontSize: 44, color: "text.secondary" }}>search_off</MsIcon>
                         <Typography variant="h6" sx={{ mt: 1 }}>
@@ -230,7 +253,7 @@ export function LibraryPage() {
                                 key={cart.id}
                                 cart={cart}
                                 running={runningIds.has(cart.id)}
-                                summary={summaries[cart.id]}
+                                targets={launch[cart.id]?.targets}
                                 actions={actions}
                             />
                         ))}
@@ -243,6 +266,7 @@ export function LibraryPage() {
                                     <TableCell>Cart</TableCell>
                                     <TableCell>Category</TableCell>
                                     <TableCell>Year</TableCell>
+                                    <TableCell>Revision</TableCell>
                                     <TableCell>Playtime</TableCell>
                                     <TableCell>Runs</TableCell>
                                     <TableCell>Status</TableCell>
@@ -255,7 +279,7 @@ export function LibraryPage() {
                                         key={cart.id}
                                         cart={cart}
                                         running={runningIds.has(cart.id)}
-                                        summary={summaries[cart.id]}
+                                        targets={launch[cart.id]?.targets}
                                         actions={actions}
                                     />
                                 ))}
@@ -269,8 +293,8 @@ export function LibraryPage() {
                 <DialogTitle>Delete “{deleting?.info.name}”?</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        The folder <strong style={{ fontFamily: '"IBM Plex Mono", monospace' }}>{deleting?.dir}</strong>{" "}
-                        and its saved states will be removed permanently. This action cannot be undone.
+                        Its archive, its installed copy and every save file written during a run will be removed. This
+                        cannot be undone.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
@@ -280,6 +304,10 @@ export function LibraryPage() {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            <ExportDialog cart={exporting} onClose={() => setExporting(null)} />
+
+            {report && <ImportReportDialog report={report} onClose={() => setReport(null)} />}
         </Box>
     );
 }

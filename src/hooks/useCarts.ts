@@ -1,34 +1,49 @@
 import { createContext, createElement, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { Cart, CartInfo, CartProcess, CartSummary, DosboxVersions, SetupState } from "@/types";
+import type {
+    Author,
+    Cart,
+    CartInfo,
+    CartProcess,
+    DosboxProbe,
+    ExportPreview,
+    ImportAction,
+    LaunchInfo,
+    SetupState,
+} from "@/types";
 
+/**
+ * One source of truth for the library: the cart list, the live processes and
+ * the cached `launch.json` of every cart whose Run menu has been opened.
+ *
+ * Carts carry their own summary, so there is no separate summaries map — the
+ * backend joins the two tables on every `discover_carts`.
+ */
 export function useCarts() {
     const [carts, setCarts] = useState<Cart[]>([]);
-    const [dosboxVersions, setDosboxVersions] = useState<DosboxVersions>({ default: "", versions: [] });
     const [processes, setProcesses] = useState<CartProcess[]>([]);
-    const [summaries, setSummaries] = useState<Record<string, CartSummary>>({});
+    const [launch, setLaunch] = useState<Record<string, LaunchInfo>>({});
+    const [dosbox, setDosbox] = useState<DosboxProbe | null>(null);
     const [setupState, setSetupState] = useState<SetupState | null>(null);
     const [loading, setLoading] = useState(true);
 
     const refresh = useCallback(async () => {
-        const [list, summaryMap] = await Promise.all([api.discoverCarts(), api.getCartSummaries()]);
-        setCarts(list);
-        setSummaries(summaryMap);
-    }, []);
-
-    const refreshVersions = useCallback(async () => {
-        setDosboxVersions(await api.getDosboxVersions());
+        setCarts(await api.discoverCarts());
     }, []);
 
     const refreshProcesses = useCallback(async () => {
         setProcesses(await api.listCartProcesses());
     }, []);
 
+    const refreshDosbox = useCallback(async () => {
+        setDosbox(await api.getDosboxPath());
+    }, []);
+
     useEffect(() => {
-        Promise.all([refresh(), refreshVersions(), refreshProcesses(), api.getSetupState().then(setSetupState)])
+        Promise.all([refresh(), refreshProcesses(), refreshDosbox(), api.getSetupState().then(setSetupState)])
             .catch((error) => console.error("retrium: failed to load initial state", error))
             .finally(() => setLoading(false));
-    }, [refresh, refreshVersions, refreshProcesses]);
+    }, [refresh, refreshProcesses, refreshDosbox]);
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -37,44 +52,58 @@ export function useCarts() {
         return () => clearInterval(timer);
     }, [refreshProcesses]);
 
-    const defaultVersionName = useCallback(() => {
-        const found = dosboxVersions.versions.find((v) => v.name === dosboxVersions.default);
-        return found?.name ?? dosboxVersions.versions[0]?.name;
-    }, [dosboxVersions]);
+    /** `launch.json` is read on demand: a library of 200 carts should not read 200 files at startup. */
+    const loadLaunch = useCallback(async (id: string) => {
+        const info = await api.getCartLaunch(id);
+        setLaunch((map) => ({ ...map, [id]: info }));
+        return info;
+    }, []);
+
+    const forgetLaunch = useCallback((id: string) => {
+        setLaunch((map) => {
+            const { [id]: _dropped, ...rest } = map;
+            return rest;
+        });
+    }, []);
 
     const completeSetup = useCallback(
-        async (library: string, dosbox: string) => {
-            await api.completeSetup(library, dosbox);
-            setSetupState({ configured: true, library, dosbox });
-            await Promise.all([refresh(), refreshVersions()]);
+        async (library: string, dosboxPath: string) => {
+            await api.completeSetup(library, dosboxPath);
+            setSetupState({ configured: true, library, dosbox: dosboxPath });
+            await Promise.all([refresh(), refreshDosbox()]);
         },
-        [refresh, refreshVersions],
+        [refresh, refreshDosbox],
     );
 
     const changeLibraryDirectory = useCallback(
         async (library: string) => {
             await api.setLibraryDirectory(library);
             setSetupState((state) => (state ? { ...state, library } : state));
+            setLaunch({});
             await refresh();
         },
         [refresh],
     );
 
+    const saveDosboxPath = useCallback(async (path: string) => {
+        const probe = await api.setDosboxPath(path);
+        setDosbox(probe);
+        setSetupState((state) => (state ? { ...state, dosbox: probe.path } : state));
+        return probe;
+    }, []);
+
     const runCart = useCallback(
-        async (cart: Cart, version?: string) => {
-            const name = version ?? defaultVersionName();
-            if (!name) {
-                throw new Error("No DOSBox version configured");
-            }
-            await api.runCart({ cart, dosboxVersion: name });
+        async (id: string, targetId?: string) => {
+            const process = await api.runCart(id, targetId);
             await refreshProcesses();
+            return process;
         },
-        [defaultVersionName, refreshProcesses],
+        [refreshProcesses],
     );
 
     const stopCart = useCallback(
-        async (cart: Cart) => {
-            await api.stopCart(cart);
+        async (id: string) => {
+            await api.stopCart(id);
             await refreshProcesses();
         },
         [refreshProcesses],
@@ -87,72 +116,104 @@ export function useCarts() {
     }, [refreshProcesses]);
 
     const addCarts = useCallback(async () => {
-        const added = await api.addCarts();
+        const report = await api.addCarts();
         await refresh();
-        return added;
+        return report;
     }, [refresh]);
 
-    const saveCartInfo = useCallback(async (cart: Cart, info: CartInfo) => {
-        const updated = await api.updateCartInfo(cart, info);
+    const resolveImport = useCallback(
+        async (archive: string, action: ImportAction) => {
+            const cart = await api.resolveImport(archive, action);
+            if (cart) {
+                setLaunch((map) => {
+                    const { [cart.id]: _stale, ...rest } = map;
+                    return rest;
+                });
+            }
+            await refresh();
+            return cart;
+        },
+        [refresh],
+    );
+
+    const saveCartInfo = useCallback(async (id: string, info: CartInfo, author?: Author) => {
+        const updated = await api.updateCartInfo(id, info, author);
         setCarts((list) => list.map((item) => (item.id === updated.id ? updated : item)));
         return updated;
     }, []);
 
     const deleteCart = useCallback(
-        async (cart: Cart) => {
-            await api.deleteCart(cart);
+        async (id: string) => {
+            await api.deleteCart(id);
+            forgetLaunch(id);
             await refresh();
         },
-        [refresh],
+        [refresh, forgetLaunch],
     );
 
-    const addDosboxVersion = useCallback(
-        async (name: string, path: string) => {
-            await api.addDosboxVersion(name, path);
-            await refreshVersions();
+    const resetCart = useCallback(
+        async (id: string) => {
+            await api.resetCart(id);
+            forgetLaunch(id);
+            await refresh();
         },
-        [refreshVersions],
+        [refresh, forgetLaunch],
     );
 
-    const removeDosboxVersion = useCallback(
-        async (name: string) => {
-            await api.removeDosboxVersion(name);
-            await refreshVersions();
+    const repairCart = useCallback(
+        async (id: string) => {
+            await api.repairCart(id);
+            forgetLaunch(id);
+            await refresh();
         },
-        [refreshVersions],
+        [refresh, forgetLaunch],
     );
 
-    const setDefaultDosboxVersion = useCallback(
-        async (name: string) => {
-            await api.setDefaultDosboxVersion(name);
-            await refreshVersions();
-        },
-        [refreshVersions],
-    );
+    const previewExport = useCallback((id: string): Promise<ExportPreview> => api.previewExport(id), []);
+
+    /**
+     * Rebuild the archive at `revision` and return the refreshed cart. Only the
+     * export dialog calls this: it is the single write entry point for
+     * `cart.revision`.
+     */
+    const commitCart = useCallback(async (id: string, revision?: number) => {
+        const updated = await api.commitCart(id, revision);
+        setCarts((list) => list.map((item) => (item.id === updated.id ? updated : item)));
+        return updated;
+    }, []);
+
+    const exportCartFile = useCallback((id: string) => api.exportCartFile(id), []);
 
     return {
         carts,
-        dosboxVersions,
         processes,
-        summaries,
+        launch,
+        dosbox,
         setupState,
         loading,
         refresh,
+        refreshProcesses,
+        refreshDosbox,
+        loadLaunch,
         completeSetup,
         changeLibraryDirectory,
+        saveDosboxPath,
         runCart,
         stopCart,
         stopAllCarts,
         addCarts,
+        resolveImport,
         saveCartInfo,
         deleteCart,
-        addDosboxVersion,
-        removeDosboxVersion,
-        setDefaultDosboxVersion,
+        resetCart,
+        repairCart,
+        previewExport,
+        commitCart,
+        exportCartFile,
     };
 }
 
-type CartsContextValue = ReturnType<typeof useCarts>;
+export type CartsContextValue = ReturnType<typeof useCarts>;
 
 const CartsContext = createContext<CartsContextValue | null>(null);
 
@@ -167,4 +228,9 @@ export function useCartsContext(): CartsContextValue {
         throw new Error("useCartsContext must be used within a CartsProvider");
     }
     return ctx;
+}
+
+/** `true` while any process is running this cart. One cart, one instance. */
+export function useRunning(processes: CartProcess[], id: string | undefined): CartProcess | undefined {
+    return id ? processes.find((process) => process.cartId === id) : undefined;
 }

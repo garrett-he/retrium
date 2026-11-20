@@ -1,24 +1,20 @@
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
-import Radio from "@mui/material/Radio";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { MsIcon } from "@/components/MsIcon";
 import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
 import { api } from "@/lib/api";
 import type { ThemeMode } from "@/theme";
+import type { DosboxProbe } from "@/types";
 
 interface InfoRowProps {
     label: string;
@@ -57,49 +53,65 @@ function InfoRow({ label, value, mono = false, action }: InfoRowProps) {
     );
 }
 
-/** Settings: storage, DOSBox version management, appearance and about. */
+/** Settings: storage, the single DOSBox path, appearance and about. */
 export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeChange: (mode: ThemeMode) => void }) {
     const { notify } = useSnackbar();
-    const { dosboxVersions, setupState, addDosboxVersion, removeDosboxVersion, setDefaultDosboxVersion } =
-        useCartsContext();
+    const { setupState, dosbox, changeLibraryDirectory, saveDosboxPath } = useCartsContext();
 
-    const [addOpen, setAddOpen] = useState(false);
-    const [newName, setNewName] = useState("");
-    const [newPath, setNewPath] = useState("");
+    const [path, setPath] = useState(dosbox?.path ?? "");
+    const [probe, setProbe] = useState<DosboxProbe | null>(null);
+    const [busy, setBusy] = useState(false);
 
-    const handleAdd = () => {
-        addDosboxVersion(newName.trim(), newPath.trim())
-            .then(() => {
-                setAddOpen(false);
-                setNewName("");
-                setNewPath("");
-                notify("DOSBox version added", "success");
+    useEffect(() => {
+        setPath(dosbox?.path ?? "");
+        setProbe(dosbox);
+    }, [dosbox]);
+
+    const handleBrowse = () => {
+        api.pickDosboxExecutable()
+            .then((picked) => {
+                if (picked) {
+                    setPath(picked);
+                    setProbe(null);
+                }
             })
             .catch((error) => notify(String(error), "error"));
     };
 
-    const handleRemove = (name: string) => {
-        removeDosboxVersion(name)
-            .then(() => notify("DOSBox version removed", "info"))
-            .catch((error) => notify(String(error), "error"));
+    const handleTest = () => {
+        setBusy(true);
+        api.probeDosboxPath(path.trim())
+            .then(setProbe)
+            .catch((error) => notify(String(error), "error"))
+            .finally(() => setBusy(false));
     };
 
-    const handleSetDefault = (name: string) => {
-        setDefaultDosboxVersion(name)
-            .then(() => notify(`${name} is now the default DOSBox`, "success"))
-            .catch((error) => notify(String(error), "error"));
+    const handleSave = () => {
+        setBusy(true);
+        saveDosboxPath(path.trim())
+            .then((result) => {
+                setProbe(result);
+                notify(
+                    result.version ? `DOSBox ${result.version} saved` : "DOSBox path saved (version unknown)",
+                    "success",
+                );
+            })
+            .catch((error) => notify(String(error), "error"))
+            .finally(() => setBusy(false));
     };
 
     const handleChangeDirectory = () => {
         api.pickLibraryDirectory()
-            .then((path) => {
-                if (!path) {
+            .then((picked) => {
+                if (!picked) {
                     return;
                 }
-                return api.setLibraryDirectory(path).then(() => notify(`Library moved to ${path}`, "success"));
+                return changeLibraryDirectory(picked).then(() => notify(`Library moved to ${picked}`, "success"));
             })
             .catch((error) => notify(String(error), "error"));
     };
+
+    const dirty = path.trim() !== (dosbox?.path ?? "");
 
     return (
         <Box className="fade-up">
@@ -110,94 +122,59 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                         <Typography variant="h6">Storage</Typography>
                     </Stack>
                     <InfoRow label="Library" value={setupState?.library ?? "—"} mono />
-                    <InfoRow label="Carts" value="stored in per-cart sub-folders with saved states" />
+                    <InfoRow label="Carts" value="one archive plus one installed copy per cart" />
                     <Button size="small" variant="outlined" sx={{ mt: 1.5 }} onClick={handleChangeDirectory}>
                         Change directory
                     </Button>
                 </Paper>
 
                 <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
-                        <Stack direction="row" spacing={1.5} alignItems="center">
-                            <MsIcon sx={{ color: "primary.main" }}>memory</MsIcon>
-                            <Typography variant="h6">DOSBox versions</Typography>
-                        </Stack>
-                        <Button
+                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
+                        <MsIcon sx={{ color: "primary.main" }}>memory</MsIcon>
+                        <Typography variant="h6">DOSBox</Typography>
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Retrium does not ship DOSBox. Point it at the executable you already have; every cart is
+                        launched from it with its own configuration.
+                    </Typography>
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="flex-start">
+                        <TextField
+                            label="Executable"
                             size="small"
+                            fullWidth
+                            placeholder="C:\DOSBox\dosbox.exe"
+                            value={path}
+                            onChange={(event) => setPath(event.target.value)}
+                            InputProps={{ sx: { fontFamily: '"IBM Plex Mono", monospace' } }}
+                        />
+                        <Button onClick={handleBrowse} sx={{ flexShrink: 0 }}>
+                            Browse
+                        </Button>
+                        <Button onClick={handleTest} disabled={busy || path.trim().length === 0} sx={{ flexShrink: 0 }}>
+                            Test
+                        </Button>
+                        <Button
                             variant="contained"
-                            startIcon={<MsIcon>add</MsIcon>}
-                            onClick={() => setAddOpen(true)}
+                            onClick={handleSave}
+                            disabled={busy || path.trim().length === 0 || !dirty}
+                            sx={{ flexShrink: 0 }}
                         >
-                            Add
+                            Save
                         </Button>
                     </Stack>
-                    {dosboxVersions.versions.map((version) => {
-                        const isDefault = version.name === dosboxVersions.default;
-                        return (
-                            <Stack
-                                key={version.name}
-                                direction="row"
-                                alignItems="center"
-                                spacing={1.5}
-                                sx={{
-                                    py: 1,
-                                    borderBottom: "1px dashed",
-                                    borderColor: "divider",
-                                    ":last-child": { borderBottom: "none" },
-                                }}
-                            >
-                                <Radio
-                                    size="small"
-                                    checked={isDefault}
-                                    onChange={() => handleSetDefault(version.name)}
-                                    inputProps={{ "aria-label": `Set ${version.name} as default` }}
-                                    sx={{ color: "text.secondary" }}
-                                />
-                                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                                    <Typography sx={{ fontWeight: 600, fontSize: 14.5 }}>
-                                        {version.name}
-                                        {isDefault && (
-                                            <Chip
-                                                size="small"
-                                                label="default"
-                                                sx={{
-                                                    ml: 1,
-                                                    height: 18,
-                                                    fontSize: 10,
-                                                    bgcolor: "primary.main",
-                                                    color: "primary.contrastText",
-                                                    fontFamily: '"IBM Plex Mono", monospace',
-                                                }}
-                                            />
-                                        )}
-                                    </Typography>
-                                    <Typography
-                                        variant="caption"
-                                        color="text.secondary"
-                                        sx={{ fontFamily: '"IBM Plex Mono", monospace', wordBreak: "break-all" }}
-                                    >
-                                        {version.path}
-                                    </Typography>
-                                </Box>
-                                <Tooltip title={isDefault ? "Set another version as default first" : "Remove version"}>
-                                    <span>
-                                        <IconButton
-                                            size="small"
-                                            aria-label={`Remove ${version.name}`}
-                                            disabled={isDefault}
-                                            onClick={() => handleRemove(version.name)}
-                                            sx={{ color: "error.main" }}
-                                        >
-                                            <MsIcon sx={{ fontSize: 18 }}>delete</MsIcon>
-                                        </IconButton>
-                                    </span>
-                                </Tooltip>
-                            </Stack>
-                        );
-                    })}
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                        The default version is used by the main Run button.
-                    </Typography>
+                    {probe !== null && (
+                        <Box sx={{ mt: 1.5 }}>
+                            {probe.exists ? (
+                                <Alert severity="success">
+                                    {probe.version
+                                        ? `Found DOSBox ${probe.version}`
+                                        : "File found. Version unknown — Retrium will still launch it."}
+                                </Alert>
+                            ) : (
+                                <Alert severity="error">No executable at {probe.path}</Alert>
+                            )}
+                        </Box>
+                    )}
                 </Paper>
 
                 <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>
@@ -240,7 +217,7 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                         <MsIcon sx={{ color: "primary.main" }}>info</MsIcon>
                         <Typography variant="h6">About</Typography>
                     </Stack>
-                    <InfoRow label="Version" value="0.2.1" mono />
+                    <InfoRow label="Cart format" value="version 1" mono />
                     <InfoRow label="License" value="GPL-3.0-or-later" mono />
                     <InfoRow
                         label="Homepage"
@@ -263,53 +240,6 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                     />
                 </Paper>
             </Box>
-
-            <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Add DOSBox version</DialogTitle>
-                <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "8px !important" }}>
-                    <TextField
-                        size="small"
-                        label="Display name"
-                        placeholder="e.g. DOSBox-X 2025.03"
-                        value={newName}
-                        onChange={(event) => setNewName(event.target.value)}
-                    />
-                    <TextField
-                        size="small"
-                        label="Executable path"
-                        placeholder="C:\DOSBox-X\dosbox-x.exe"
-                        value={newPath}
-                        onChange={(event) => setNewPath(event.target.value)}
-                        InputProps={{
-                            endAdornment: (
-                                <Button
-                                    size="small"
-                                    onClick={() =>
-                                        api.pickDosboxExecutable().then((path) => {
-                                            if (path) {
-                                                setNewPath(path);
-                                            }
-                                        })
-                                    }
-                                >
-                                    Browse
-                                </Button>
-                            ),
-                            sx: { fontFamily: '"IBM Plex Mono", monospace' },
-                        }}
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setAddOpen(false)}>Cancel</Button>
-                    <Button
-                        variant="contained"
-                        onClick={handleAdd}
-                        disabled={newName.trim().length === 0 || newPath.trim().length === 0}
-                    >
-                        Add version
-                    </Button>
-                </DialogActions>
-            </Dialog>
         </Box>
     );
 }

@@ -2,6 +2,7 @@ import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import Stack from "@mui/material/Stack";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useNavigate } from "react-router-dom";
 import { type CartMenuActions, CartMenuButton } from "@/components/CartMenu";
@@ -9,17 +10,17 @@ import { CoverArt } from "@/components/CoverArt";
 import { MsIcon } from "@/components/MsIcon";
 import { RunningChip } from "@/components/RunningChip";
 import { formatPlaytime } from "@/lib/format";
-import type { Cart, CartSummary } from "@/types";
+import type { Cart, TargetInfo } from "@/types";
 
 interface CartCardProps {
     cart: Cart;
     running: boolean;
-    summary?: CartSummary;
     actions: CartMenuActions;
+    targets?: TargetInfo[];
 }
 
 /** Grid card showing cover art, quick metadata and a kebab menu. */
-export function CartCard({ cart, running, summary, actions }: CartCardProps) {
+export function CartCard({ cart, running, actions, targets }: CartCardProps) {
     const navigate = useNavigate();
 
     return (
@@ -49,27 +50,35 @@ export function CartCard({ cart, running, summary, actions }: CartCardProps) {
                         color="text.secondary"
                         sx={{ fontFamily: '"IBM Plex Mono", monospace' }}
                     >
-                        {cart.info.release ?? "—"} · {cart.info.category ?? "Uncategorized"}
+                        {cart.info.release ?? "—"} · {cart.info.category ?? "Uncategorized"} · r{cart.revision}
                     </Typography>
                     <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1 }}>
                         <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
                             <MsIcon sx={{ fontSize: 15 }}>schedule</MsIcon>
                             <Typography variant="caption" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
-                                {summary ? formatPlaytime(summary.elapsed) : "—"}
+                                {cart.summary ? formatPlaytime(cart.summary.elapsed) : "—"}
                             </Typography>
                         </Stack>
                         <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
                             <MsIcon sx={{ fontSize: 15 }}>replay</MsIcon>
                             <Typography variant="caption" sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
-                                {summary ? `${summary.runs}×` : "—"}
+                                {cart.summary ? `${cart.summary.runs}×` : "—"}
                             </Typography>
                         </Stack>
+                        {cart.dirty && (
+                            <Tooltip title="Local changes have not been exported yet">
+                                <MsIcon data-testid={`dirty-${cart.id}`} sx={{ fontSize: 15, color: "warning.main" }}>
+                                    edit_note
+                                </MsIcon>
+                            </Tooltip>
+                        )}
                     </Stack>
                 </Box>
             </CardActionArea>
             <CartMenuButton
                 cart={cart}
                 running={running}
+                targets={targets}
                 actions={actions}
                 sx={{ position: "absolute", top: 6, right: 6, color: "#fff", bgcolor: "rgba(23,20,18,0.55)" }}
             />

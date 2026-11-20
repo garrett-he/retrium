@@ -1,22 +1,25 @@
+import Box from "@mui/material/Box";
 import TableCell from "@mui/material/TableCell";
 import TableRow from "@mui/material/TableRow";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useNavigate } from "react-router-dom";
 import { type CartMenuActions, CartMenuButton } from "@/components/CartMenu";
 import { CoverArt } from "@/components/CoverArt";
+import { MsIcon } from "@/components/MsIcon";
 import { RunningChip } from "@/components/RunningChip";
 import { formatPlaytime } from "@/lib/format";
-import type { Cart, CartSummary } from "@/types";
+import type { Cart, TargetInfo } from "@/types";
 
 interface CartRowProps {
     cart: Cart;
     running: boolean;
-    summary?: CartSummary;
     actions: CartMenuActions;
+    targets?: TargetInfo[];
 }
 
 /** Compact table row used by the list view of the library. */
-export function CartRow({ cart, running, summary, actions }: CartRowProps) {
+export function CartRow({ cart, running, actions, targets }: CartRowProps) {
     const navigate = useNavigate();
 
     return (
@@ -31,15 +34,28 @@ export function CartRow({ cart, running, summary, actions }: CartRowProps) {
             </TableCell>
             <TableCell>{cart.info.category ?? "Uncategorized"}</TableCell>
             <TableCell sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>{cart.info.release ?? "—"}</TableCell>
+            <TableCell sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>r{cart.revision}</TableCell>
             <TableCell sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
-                {summary ? formatPlaytime(summary.elapsed) : "—"}
+                {cart.summary ? formatPlaytime(cart.summary.elapsed) : "—"}
             </TableCell>
             <TableCell sx={{ fontFamily: '"IBM Plex Mono", monospace' }}>
-                {summary ? `${summary.runs}×` : "—"}
+                {cart.summary ? `${cart.summary.runs}×` : "—"}
             </TableCell>
-            <TableCell>{running ? <RunningChip small /> : "—"}</TableCell>
+            <TableCell>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    {running && <RunningChip small />}
+                    {cart.dirty && (
+                        <Tooltip title="Local changes have not been exported yet">
+                            <MsIcon data-testid={`dirty-${cart.id}`} sx={{ fontSize: 16, color: "warning.main" }}>
+                                edit_note
+                            </MsIcon>
+                        </Tooltip>
+                    )}
+                    {!running && !cart.dirty && "—"}
+                </Box>
+            </TableCell>
             <TableCell align="right" onClick={(event) => event.stopPropagation()}>
-                <CartMenuButton cart={cart} running={running} actions={actions} />
+                <CartMenuButton cart={cart} running={running} targets={targets} actions={actions} />
             </TableCell>
         </TableRow>
     );

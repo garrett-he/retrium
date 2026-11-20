@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { makeBackend } from "@/__mocks__/backend";
 import { CartsProvider } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
 import { SettingsPage } from "./SettingsPage";
@@ -14,34 +15,7 @@ const { invoke, openUrl } = vi.hoisted(() => ({
 vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: vi.fn((p: string) => p), invoke }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
 
-function mockResponse(cmd: string) {
-    if (cmd === "get_setup_state") {
-        return { configured: true, library: "C:\\Games", dosbox: "C:\\DOSBox\\dosbox.exe" };
-    }
-    if (cmd === "discover_carts") {
-        return [];
-    }
-    if (cmd === "get_dosbox_versions") {
-        return {
-            default: "DOSBox",
-            versions: [
-                { name: "DOSBox", path: "C:\\DOSBox\\dosbox.exe" },
-                { name: "Staging", path: "C:\\DOSBox\\staging.exe" },
-            ],
-        };
-    }
-    if (cmd === "get_cart_summaries" || cmd === "list_cart_processes") {
-        return {};
-    }
-    if (cmd === "pick_dosbox_executable") {
-        return "E:\\DOSBox\\dosbox.exe";
-    }
-    return [];
-}
-
-function mockBackend() {
-    invoke.mockImplementation(async (cmd: string) => mockResponse(cmd));
-}
+const probe = { path: "C:\\DOSBox\\dosbox.exe", exists: true, version: "DOSBox 0.74-3" };
 
 function renderPage(mode: "dark" | "light" = "dark", onModeChange = vi.fn()) {
     return render(
@@ -57,18 +31,37 @@ function renderPage(mode: "dark" | "light" = "dark", onModeChange = vi.fn()) {
 
 describe("SettingsPage", () => {
     beforeEach(() => {
-        mockBackend();
+        invoke.mockReset();
+        invoke.mockImplementation(
+            makeBackend({
+                carts: [],
+                probe,
+                handlers: {
+                    get_setup_state: () => ({
+                        configured: true,
+                        library: "C:\\Games",
+                        dosbox: "C:\\DOSBox\\dosbox.exe",
+                    }),
+                    get_dosbox_path: () => probe,
+                },
+            }),
+        );
     });
 
-    it("renders storage, versions, appearance and about sections", async () => {
+    it("renders storage, a single DOSBox path, appearance and about", async () => {
         renderPage();
-
         expect(await screen.findByText("C:\\Games")).toBeTruthy();
-        expect(screen.getByText("DOSBox versions")).toBeTruthy();
+        expect(screen.getByText("DOSBox")).toBeTruthy();
+        expect(screen.queryByText("DOSBox versions")).toBeNull();
+        expect(screen.queryByLabelText(/Set .* as default/)).toBeNull();
         expect(screen.getByText("Appearance")).toBeTruthy();
         expect(screen.getByText("GPL-3.0-or-later")).toBeTruthy();
-        expect(screen.getByText("https://github.com/garrett-he/retrium")).toBeTruthy();
-        expect(screen.queryByText("Platform")).toBeNull();
+    });
+
+    it("shows the stored path and the detected version", async () => {
+        renderPage();
+        expect(await screen.findByDisplayValue("C:\\DOSBox\\dosbox.exe")).toBeTruthy();
+        expect(await screen.findByText("Found DOSBox DOSBox 0.74-3")).toBeTruthy();
     });
 
     it("opens the homepage in the default browser", async () => {
@@ -77,58 +70,66 @@ describe("SettingsPage", () => {
         await screen.findByText("https://github.com/garrett-he/retrium");
 
         await user.click(screen.getByLabelText("Open homepage"));
-
         expect(openUrl).toHaveBeenCalledWith("https://github.com/garrett-he/retrium");
     });
 
-    it("sets a dosbox version as default via the radio", async () => {
+    it("tests a new path without saving it", async () => {
         const user = userEvent.setup();
         renderPage();
-        await screen.findByText("Staging");
+        const field = await screen.findByDisplayValue("C:\\DOSBox\\dosbox.exe");
 
-        await user.click(screen.getByLabelText("Set Staging as default"));
+        await user.clear(field);
+        await user.type(field, "C:\\Other\\dosbox.exe");
+        await user.click(screen.getByRole("button", { name: "Test" }));
 
-        expect(invoke).toHaveBeenCalledWith("set_default_dosbox_version", { name: "Staging" });
-        expect(await screen.findByText("Staging is now the default DOSBox")).toBeTruthy();
+        expect(invoke).toHaveBeenCalledWith("probe_dosbox_path", { path: "C:\\Other\\dosbox.exe" });
+        expect(invoke).not.toHaveBeenCalledWith("set_dosbox_path", expect.anything());
     });
 
-    it("removes a non-default version", async () => {
+    it("saves a path whose version cannot be detected", async () => {
+        invoke.mockImplementation(
+            makeBackend({
+                carts: [],
+                handlers: {
+                    get_setup_state: () => ({
+                        configured: true,
+                        library: "C:\\Games",
+                        dosbox: "C:\\DOSBox\\dosbox.exe",
+                    }),
+                    get_dosbox_path: () => probe,
+                    set_dosbox_path: (args) => ({ path: args.path, exists: true }),
+                },
+            }),
+        );
         const user = userEvent.setup();
         renderPage();
-        await screen.findByText("Staging");
+        const field = await screen.findByDisplayValue("C:\\DOSBox\\dosbox.exe");
 
-        await user.click(screen.getByLabelText("Remove Staging"));
+        await user.clear(field);
+        await user.type(field, "C:\\Other\\dosbox.exe");
+        await user.click(screen.getByRole("button", { name: "Save" }));
 
-        expect(invoke).toHaveBeenCalledWith("remove_dosbox_version", { name: "Staging" });
+        expect(invoke).toHaveBeenCalledWith("set_dosbox_path", { path: "C:\\Other\\dosbox.exe" });
+        expect(await screen.findByText("DOSBox path saved (version unknown)")).toBeTruthy();
     });
 
-    it("adds a new dosbox version through the dialog", async () => {
+    it("reports a missing executable", async () => {
+        invoke.mockImplementation(
+            makeBackend({
+                carts: [],
+                handlers: {
+                    get_setup_state: () => ({ configured: true, library: "C:\\Games", dosbox: "C:\\nope.exe" }),
+                    get_dosbox_path: () => ({ path: "C:\\nope.exe", exists: false }),
+                    probe_dosbox_path: () => ({ path: "C:\\nope.exe", exists: false }),
+                },
+            }),
+        );
         const user = userEvent.setup();
         renderPage();
-        await screen.findByText("Staging");
+        await screen.findByDisplayValue("C:\\nope.exe");
 
-        await user.click(screen.getByRole("button", { name: "Add" }));
-        await user.type(screen.getByLabelText("Display name"), "DOSBox-X");
-        await user.type(screen.getByLabelText("Executable path"), "C:\\DOSBox-X\\dosbox-x.exe");
-        await user.click(screen.getByRole("button", { name: "Add version" }));
-
-        expect(invoke).toHaveBeenCalledWith("add_dosbox_version", {
-            name: "DOSBox-X",
-            path: "C:\\DOSBox-X\\dosbox-x.exe",
-        });
-        expect(await screen.findByText("DOSBox version added")).toBeTruthy();
-    });
-
-    it("fills the executable path from the file dialog", async () => {
-        const user = userEvent.setup();
-        renderPage();
-        await screen.findByText("Staging");
-
-        await user.click(screen.getByRole("button", { name: "Add" }));
-        await user.click(screen.getByRole("button", { name: "Browse" }));
-
-        expect(await screen.findByDisplayValue("E:\\DOSBox\\dosbox.exe")).toBeTruthy();
-        expect(invoke).toHaveBeenCalledWith("pick_dosbox_executable");
+        await user.click(screen.getByRole("button", { name: "Test" }));
+        expect(await screen.findByText("No executable at C:\\nope.exe")).toBeTruthy();
     });
 
     it("switches the appearance mode", async () => {
@@ -138,20 +139,27 @@ describe("SettingsPage", () => {
         await screen.findByText("Appearance");
 
         await user.click(screen.getByText("Yellowed manual"));
-
         expect(onModeChange).toHaveBeenCalledWith("light");
     });
 
     it("changes the library directory via the folder picker", async () => {
         const user = userEvent.setup();
-        invoke.mockImplementation(async (cmd: string) => {
-            if (cmd === "pick_library_directory") {
-                return "D:\\Retrium";
-            }
-            return mockResponse(cmd);
-        });
+        invoke.mockImplementation(
+            makeBackend({
+                carts: [],
+                handlers: {
+                    get_setup_state: () => ({
+                        configured: true,
+                        library: "C:\\Games",
+                        dosbox: "C:\\DOSBox\\dosbox.exe",
+                    }),
+                    get_dosbox_path: () => probe,
+                    pick_library_directory: () => "D:\\Retrium",
+                },
+            }),
+        );
         renderPage();
-        await screen.findByText("DOSBox versions");
+        await screen.findByText("Storage");
 
         await user.click(screen.getByRole("button", { name: "Change directory" }));
 

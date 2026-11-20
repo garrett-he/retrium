@@ -62,9 +62,8 @@ describe("SetupPage", () => {
         await user.click(screen.getByTestId("start-scan"));
 
         expect(onComplete).toHaveBeenCalledWith(defaults.library, "E:\\DOSBox\\dosbox.exe");
-        expect(await screen.findByText("Scanning your library…")).toBeTruthy();
+        expect(await screen.findByText("Your shelf is ready")).toBeTruthy();
 
-        await screen.findByRole("button", { name: "Enter library" }, { timeout: 3000 });
         await user.click(screen.getByTestId("enter-library"));
         expect(onFinished).toHaveBeenCalled();
     });
@@ -77,6 +76,33 @@ describe("SetupPage", () => {
         await user.click(screen.getByTestId("start-scan"));
 
         expect(await screen.findByRole("alert")).toHaveTextContent("DOSBox executable not found");
+    });
+
+    it("probes the dosbox path on blur and shows the version", async () => {
+        invoke.mockResolvedValue({ path: defaults.dosbox, exists: true, version: "DOSBox 0.74-3" });
+        const user = userEvent.setup();
+        renderPage();
+
+        await user.click(screen.getByTestId("continue"));
+        await user.click(screen.getByLabelText("DOSBox executable"));
+        await user.tab();
+
+        expect(invoke).toHaveBeenCalledWith("probe_dosbox_path", { path: defaults.dosbox });
+        expect(await screen.findByText("Found DOSBox DOSBox 0.74-3")).toBeTruthy();
+    });
+
+    it("still allows finishing when the version cannot be detected", async () => {
+        invoke.mockResolvedValue({ path: defaults.dosbox, exists: true });
+        const user = userEvent.setup();
+        const { onComplete } = renderPage();
+
+        await user.click(screen.getByTestId("continue"));
+        await user.click(screen.getByLabelText("DOSBox executable"));
+        await user.tab();
+
+        expect(await screen.findByText(/Version unknown/)).toBeTruthy();
+        await user.click(screen.getByTestId("start-scan"));
+        expect(onComplete).toHaveBeenCalled();
     });
 
     it("fills the library path chosen in the folder dialog", async () => {

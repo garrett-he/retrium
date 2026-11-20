@@ -21,13 +21,13 @@
 
 ## P0 地基
 
-### [ ] T01 依赖与模块骨架
+### [x] T01 依赖与模块骨架
 - 规模 S · 无依赖
 - **改**：`src-tauri/Cargo.toml` 增 `rusqlite`（`bundled`，避免依赖系统 sqlite）、`sha2`、`uuid`（`v4` + `v7`）、`thiserror`；**先不删** `sha1`/`hex`/`notify`（P7 清理）
 - **建**：`hash.rs` `manifest.rs` `launch.rs` `library.rs` `state.rs` `db.rs`，在 `lib.rs` 里 `pub mod`
 - **完成**：`cargo check` 通过，旧代码一行未动
 
-### [ ] T02 tree_hash
+### [x] T02 tree_hash
 - 规模 M · ⛓T01
 - **改**：`hash.rs`
 - **做**：
@@ -37,7 +37,7 @@
 - **建**：`design/fixtures/hash-vectors.json`（空集合、单文件、多文件乱序、`("ab")` vs `("a","b")`、含 UTF-8 中文路径、含空文件）
 - **完成**：单元测试逐条断言黄金向量；空集合 = `e3b0c442…b855`；同一内容两种打包顺序结果相同
 
-### [ ] T03 manifest 结构与校验
+### [x] T03 manifest 结构与校验
 - 规模 M · ⛓T01
 - **改**：`manifest.rs`
 - **做**：`Manifest { version, cart: CartBlock, program: ProgramBlock }`；`CartBlock { id, revision, author: Option<Author>, tool: Tool, createdAt }`；`ProgramBlock { name, language, release, category, developer, publisher, series, tags, players, platform, dos, externalIds }`
@@ -45,7 +45,7 @@
   - `to_json()` 用固定字段序（serde 结构体声明序）输出 pretty JSON
 - **完成**：合法/非法各 1 组用例；缺 `author` 通过；`author.name = "  "` 拒绝并给出 `cart.author.name`；未知根级键被忽略而非报错
 
-### [ ] T04 launch.json 结构与 target/profile 校验
+### [x] T04 launch.json 结构与 target/profile 校验
 - 规模 M · ⛓T01
 - **改**：`launch.rs`
 - **做**：`Launch { version, default: Option<String>, targets: Vec<Target>, profiles: BTreeMap<String, Profile> }`
@@ -55,7 +55,7 @@
   - `default` 省略合法（取 `targets[0]`），指向不存在则拒绝
 - **完成**：设计文档 §1.3 两张字段表逐行有用例；错误信息含 `targets[1].executable` 这类路径
 
-### [ ] T05 launch.json 的 sound 与 extra 规则
+### [x] T05 launch.json 的 sound 与 extra 规则
 - 规模 M · ⛓T04
 - **改**：`launch.rs`
 - **做**：
@@ -64,7 +64,7 @@
   - 撞键检测：`dosbox.machine`、`dosbox.memsize`、`cpu.cycles`、`cpu.core`、`sblaster.sbtype`、`gus.gus`、`mixer.nosound`，外加基础覆盖 `sdl.mapperfile`、`dosbox.captures`
 - **完成**：`["sb16","sbpro2"]` 拒绝；`["none","sb16"]` 拒绝；`{"cpu.cycles":"3000"}` + `cycles: 3000` 拒绝并点名；段名 `render2` 拒绝
 
-### [ ] T06 生成 dosbox.conf
+### [x] T06 生成 dosbox.conf
 - 规模 L · ⛓T05
 - **改**：`launch.rs`（`fn render_conf(launch, target_id, installed_dir, ctx) -> String`）
 - **做**：
@@ -76,13 +76,13 @@
   - `preCommands` 白名单二次校验：`cd`/`loadfix`/`set`（仅 BLASTER、SOUND）/`imgmount`（限 `Program/`、`Resources/`）；禁裸 `MOUNT`、盘符、`|&><`、越界 `..`
 - **完成**：同一输入两次生成字节完全相同；`cd` target（无 profile）只输出基础覆盖 + autoexec；含空格参数被正确引号包裹
 
-### [ ] T07 SQLite
+### [x] T07 SQLite
 - 规模 M · ⛓T01
 - **改**：`db.rs`
 - **做**：`Connection`（`Mutex` 持有）、`ensure_schema()`（`PRAGMA user_version` 不匹配则删库重建）、`upsert_cart`、`get_cart`、`list_carts`（按 `name` 排序）、`delete_cart_row`、`find_by_package_hash`、`upsert_summary`、`list_summaries`
 - **完成**：schema 与设计文档 §4 逐列一致；`user_version` 改成 99 → 重开自动重建空库；`package_hash` 重复查询命中
 
-### [ ] T08 库布局与 ZIP 安全读写
+### [x] T08 库布局与 ZIP 安全读写
 - 规模 L · ⛓T02
 - **改**：`library.rs`
 - **做**：
@@ -92,7 +92,7 @@
   - `write_archive(entries, dest)`：写同目录临时文件 → 成功后原子 rename；**不写目录 entry**（保证 hash 与打包工具无关）
 - **完成**：8 个坏包夹具逐个被拒且目标目录无残留；往返解压再打包，`tree_hash` 不变
 
-### [ ] T09 存档差异层
+### [x] T09 存档差异层
 - 规模 M · ⛓T08
 - **改**：`state.rs`
 - **做**：
@@ -106,7 +106,7 @@
 
 ## P1 契约
 
-### [ ] T10 Rust DTO 与命令签名
+### [x] T10 Rust DTO 与命令签名
 - 规模 M · ⛓T07 T08
 - **改**：`lib.rs`、`commands.rs`
 - **做**：定稿并留 `todo!()` 实现——
@@ -115,7 +115,7 @@
   - `Cart` 改为 `{ id, revision, author?, tool, createdAt, info: CartInfo, cover? }`，去掉 `dir`
 - **完成**：`cargo check` 通过；`invoke_handler` 列表与上述一致
 
-### [ ] T11 TS 类型与 api.ts
+### [x] T11 TS 类型与 api.ts
 - 规模 S · ⛓T10
 - **改**：`src/types/index.ts`、`src/lib/api.ts`
 - **做**：按 T10 逐个镜像；`Manifest`/`Launch`/`ImportReport`/`LaunchInfo` 类型；删 `DosboxVersion`/`DosboxVersions`
@@ -125,7 +125,7 @@
 
 ## P2 导入与库
 
-### [ ] T12 config.json 单路径
+### [x] T12 config.json 单路径
 - 规模 S · ⛓T01
 - **改**：`config.rs`
 - **做**：`Config { library, dosbox: { path } }`；删 `DosboxVersion`/`DosboxConfig.versions`/`default`/`default_version()`/`version()`/`LegacyConfig`/`From<LegacyConfig>`
@@ -133,7 +133,7 @@
   - 新增 `probe_version(path) -> Option<String>`：跑 `-version` 取首行，失败返回 `None`
 - **完成**：旧结构 JSON 读不出来且不迁移；`probe_version` 对不存在的路径返回 `None` 不 panic
 
-### [ ] T13 导入分析阶段
+### [x] T13 导入分析阶段
 - 规模 L · ⛓T02 T03 T04 T08 T11
 - **改**：`library.rs`、`commands.rs`
 - **做**：`analyze(archive) -> ImportOutcome`
@@ -144,7 +144,7 @@
   5. 判 `(id, revision, hash)`：无 id → `New`；同 revision 同 hash → `Idempotent`；高 revision → `Upgrade`；同 revision 异 hash → `Conflict`；低 revision → `Downgrade`；`hash` 命中别的 cart → `Duplicate`（附已有 id）
 - **完成**：8 个坏包夹具各给出可读原因；每个 `pending` 项带 `archive_path` 供后续 `resolve_import`
 
-### [ ] T14 导入落盘阶段
+### [x] T14 导入落盘阶段
 - 规模 L · ⛓T13
 - **改**：`library.rs`、`commands.rs`、`db.rs`
 - **做**：
@@ -156,7 +156,7 @@
   6. `add_carts` 返回 `ImportReport { imported[], skipped[], pending[] }`；`resolve_import(archive, action)` 处理 `pending`
 - **完成**：`Upgrade` 后 `State/` 里的存档仍在；`Conflict` 默认不覆盖磁盘；中途失败后目录无残留
 
-### [ ] T15 discover 改为读 DB
+### [x] T15 discover 改为读 DB
 - 规模 M · ⛓T14
 - **改**：`commands.rs`、`db.rs`
 - **做**：`discover_carts` 读 `carts` 表；启动时做一次轻量对账——枚举 `carts/*.cart` 与 DB 主键比对，缺行的用 `Runtime/commit.json` + 归档内 `manifest.json` 补索引，多余的删行；`cover` 取 `installed/<id>/Resources/cover.png` 是否存在
@@ -166,7 +166,7 @@
 
 ## P3 运行
 
-### [ ] T16 run_cart 主链路
+### [x] T16 run_cart 主链路
 - 规模 L · ⛓T06 T09 T11
 - **改**：`commands.rs`、`launch.rs`
 - **做**：
@@ -178,13 +178,13 @@
   6. 进程立刻退出且 stderr 提示无法识别 `-noconfig` → 报"该 DOSBox 不受支持"，不重试
 - **完成**：`target_id` 为 `None` 走 `default`，非法 id 报错；跑完 `dosbox.conf` 与期望文本逐字节一致
 
-### [ ] T17 退出比对、stop、崩溃恢复
+### [x] T17 退出比对、stop、崩溃恢复
 - 规模 M · ⛓T16
 - **改**：`commands.rs`
 - **做**：`child.wait()` 或 `kill_tx` 后 `state::diff` → 删 `running` → `UPSERT summaries`（`runs`、`elapsed`、`last_run`）→ 移出 `processes`；启动时若见 `running` 且 `baseline.json` 存在，先补比对再继续；同 cart 第二次 Run 直接拒绝
 - **完成**：kill 后比对仍执行；`running` 残留的模拟场景能补回存档；`summaries` 累加正确
 
-### [ ] T18 get_cart_launch
+### [x] T18 get_cart_launch
 - 规模 S · ⛓T16
 - **改**：`commands.rs`
 - **做**：返回 `{ default_target, targets: [{id, label, executable}] }`；`launch.json` 解析失败返回 `{ error: "启动配置无效：targets[1].executable 不存在" }`，不猜
@@ -194,13 +194,13 @@
 
 ## P4 生命周期
 
-### [ ] T19 删除 / 重置 / 修复
+### [x] T19 删除 / 重置 / 修复
 - 规模 M · ⛓T17
 - **改**：`commands.rs`、`library.rs`
 - **做**：`delete_cart`（归档 + `installed/` + 两表行，运行中拒绝）；`reset_cart`（清 `Program/`、`State/`、`baseline.json`、`running`，重解压）；`repair_cart`（只重解压 `Program/` 再 `apply` `State/`）
 - **完成**：重置后 `Program/` 与归档解压结果一致且 `State/` 为空；修复后存档仍在
 
-### [ ] T20 update_cart_info 写 DB
+### [x] T20 update_cart_info 写 DB
 - 规模 M · ⛓T15
 - **改**：`commands.rs`、`db.rs`
 - **做**：`UPDATE carts` 覆盖 program 标量与 `author_*`；封面变更同步写 `installed/<id>/Resources/cover.png`；**不动归档、不动 `revision`、不重算 hash**（下次 `commit_cart` 才落进 manifest）
@@ -210,7 +210,7 @@
 
 ## P5 导出
 
-### [ ] T21 collect_export_entries（四行矩阵）
+### [x] T21 collect_export_entries（四行矩阵）
 - 规模 L · ⛓T09 T14
 - **改**：`library.rs`
 - **做**：唯一实现，返回 `Vec<(zip_path, Source)>`，`Source = Installed(PathBuf) | Archive(String)`
@@ -222,7 +222,7 @@
   - 输出按路径字节序排序
 - **完成**：四行各一条用例；`Runtime/` 任何内容都不在结果里
 
-### [ ] T22 commit_cart 与 export_cart_file
+### [x] T22 commit_cart 与 export_cart_file
 - 规模 L · ⛓T21 T03 T02
 - **改**：`library.rs`、`commands.rs`、`db.rs`
 - **做**：
@@ -231,7 +231,7 @@
   - `export_cart_file(id)`：保存对话框，复制 `carts/<id>.cart`，不重算
 - **完成**：导出包里只有 `hash`/`manifest.json`/`Program/**`/`Config/launch.json`/`Resources/**`；导出后自己的导入校验通过；中断后原归档完好
 
-### [ ] T23 dirty 判定接进 discover
+### [x] T23 dirty 判定接进 discover
 - 规模 S · ⛓T22
 - **改**：`commands.rs`、`db.rs`
 - **做**：`discover_carts` 顺带返回 `dirty`（读 `commit.json` 与 `package_hash` 比，不扫文件）；未知时 `null`
@@ -241,37 +241,37 @@
 
 ## P6 UI
 
-### [ ] T24 RunSplitButton 改 targets
+### [x] T24 RunSplitButton 改 targets
 - 规模 M · ⛓T11 T18
 - **改**：`src/components/RunSplitButton.tsx`
 - **做**：主按钮 = `default_target` 的 `label`；下拉列 targets（`label` + 小字 `executable`），点击不改写 `default`；单 target 不出箭头；运行中禁用；`launch.json` 无效时按钮禁用并显示原因；删掉 DOSBox 版本选择器
 - **完成**：3 个用例（单 target 无箭头 / 多 target 列出且点击传对 id / 运行中禁用）
 
-### [ ] T25 CartMenu、RunningPage、CartPage
+### [x] T25 CartMenu、RunningPage、CartPage
 - 规模 M · ⛓T24
 - **改**：`src/components/CartMenu.tsx`、`src/pages/RunningPage.tsx`、`src/pages/CartPage.tsx`
 - **做**：`Run` + `Run with…` 子菜单；`RunningPage` 显示当前 target `label`；`CartPage` 显示 `revision`、dirty 徽章、重置/修复入口
 - **完成**：运行中页面能看到进的是哪个 target
 
-### [ ] T26 设置页与首次启动页单路径
+### [x] T26 设置页与首次启动页单路径
 - 规模 M · ⛓T12
 - **改**：`src/pages/SettingsPage.tsx`、`src/pages/SetupPage.tsx`
 - **做**：一个路径输入 + 浏览 + 测试 + 探测到的版本号；删掉增删条目、设为默认、版本列表全部逻辑与状态
 - **完成**：路径无效时显示原因；探测失败显示"版本未知"但允许保存
 
-### [ ] T27 EditCartDialog 扩展字段
+### [x] T27 EditCartDialog 扩展字段
 - 规模 M · ⛓T11
 - **改**：`src/components/EditCartDialog.tsx`
 - **做**：补 `players`、`platform`、`dos.version`、`dos.input`、`externalIds`、`author.name`/`email`；`category` 用 8 值下拉、`language` 用 BCP 47 下拉
 - **完成**：全部字段编辑后能保存并回显；`author` 可留空
 
-### [ ] T28 导入结果对话框
+### [x] T28 导入结果对话框
 - 规模 M · ⛓T14
 - **改**：`src/pages/LibraryPage.tsx` + 新组件 `ImportReportDialog.tsx`
 - **做**：展示 `imported`/`skipped`/`pending`；`pending` 每项给 `Upgrade`/`Replace`/`Skip` 三个动作，调 `resolve_import`；拒绝原因原文展示
 - **完成**：冲突项默认不选"替换"；处理完全部 `pending` 后列表刷新
 
-### [ ] T29 空态与文案清扫
+### [x] T29 空态与文案清扫
 - 规模 S · ⛓T25
 - **改**：`src/pages/*.tsx`
 - **做**：删掉所有 "DOSBox version"、"archive"、"states" 一类旧措辞；空库提示改为"导入 .cart"；删 DB 重建后的提示

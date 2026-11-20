@@ -3,19 +3,20 @@ import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CoverArt } from "@/components/CoverArt";
 import { MsIcon } from "@/components/MsIcon";
 import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
 import { formatUptime } from "@/lib/format";
+import type { Cart } from "@/types";
 
 /** Live view of every DOSBox process Retrium is tracking. */
 export function RunningPage() {
     const navigate = useNavigate();
     const { notify } = useSnackbar();
-    const { processes, stopCart, stopAllCarts } = useCartsContext();
+    const { carts, processes, stopCart, stopAllCarts } = useCartsContext();
     const [now, setNow] = useState(() => Date.now());
 
     useEffect(() => {
@@ -23,12 +24,10 @@ export function RunningPage() {
         return () => clearInterval(timer);
     }, []);
 
+    const byId = useMemo(() => new Map(carts.map((cart) => [cart.id, cart])), [carts]);
+
     const handleStop = (id: string, name: string) => {
-        const cart = processes.find((process) => process.cart.id === id)?.cart;
-        if (!cart) {
-            return;
-        }
-        stopCart(cart)
+        stopCart(id)
             .then(() => notify(`${name} stopped`, "info"))
             .catch((error) => notify(String(error), "error"));
     };
@@ -72,45 +71,75 @@ export function RunningPage() {
                     </Paper>
                 ) : (
                     <Stack spacing={2}>
-                        {processes.map((process) => (
-                            <Paper
-                                key={process.cart.id}
-                                variant="outlined"
-                                sx={{ p: 2, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}
-                            >
-                                <CoverArt cart={process.cart} height={56} glyphSize={28} radius="8px" />
-                                <Box sx={{ minWidth: 180, flexGrow: 1 }}>
-                                    <Typography sx={{ fontWeight: 600 }}>{process.cart.info.name}</Typography>
-                                    <Typography
-                                        variant="caption"
-                                        color="text.secondary"
-                                        sx={{ fontFamily: '"IBM Plex Mono", monospace' }}
-                                    >
-                                        pid {process.pid} · DOSBox {process.dosboxVersion}
-                                    </Typography>
-                                </Box>
-                                <Stack direction="row" spacing={0.5} alignItems="center">
-                                    <MsIcon sx={{ fontSize: 18, color: "success.main" }}>timer</MsIcon>
-                                    <Typography
-                                        sx={{ fontFamily: '"IBM Plex Mono", monospace', fontWeight: 600, fontSize: 15 }}
-                                    >
-                                        {formatUptime(process.startedAt, now)}
-                                    </Typography>
-                                </Stack>
-                                <Button
+                        {processes.map((process) => {
+                            const cart: Cart | undefined = byId.get(process.cartId);
+                            const name = cart?.info.name ?? process.cartId;
+                            return (
+                                <Paper
+                                    key={process.cartId}
                                     variant="outlined"
-                                    color="error"
-                                    size="small"
-                                    startIcon={<MsIcon>stop</MsIcon>}
-                                    onClick={() => handleStop(process.cart.id, process.cart.info.name)}
+                                    sx={{ p: 2, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}
                                 >
-                                    Stop
-                                </Button>
-                            </Paper>
-                        ))}
+                                    <Placeholder cart={cart} />
+                                    <Box sx={{ minWidth: 180, flexGrow: 1 }}>
+                                        <Typography sx={{ fontWeight: 600 }}>{name}</Typography>
+                                        <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                            sx={{ fontFamily: '"IBM Plex Mono", monospace' }}
+                                        >
+                                            pid {process.pid} · {process.targetLabel}
+                                        </Typography>
+                                    </Box>
+                                    <Stack direction="row" spacing={0.5} alignItems="center">
+                                        <MsIcon sx={{ fontSize: 18, color: "success.main" }}>timer</MsIcon>
+                                        <Typography
+                                            sx={{
+                                                fontFamily: '"IBM Plex Mono", monospace',
+                                                fontWeight: 600,
+                                                fontSize: 15,
+                                            }}
+                                        >
+                                            {formatUptime(process.startedAt, now)}
+                                        </Typography>
+                                    </Stack>
+                                    <Button
+                                        variant="outlined"
+                                        color="error"
+                                        size="small"
+                                        startIcon={<MsIcon>stop</MsIcon>}
+                                        onClick={() => handleStop(process.cartId, name)}
+                                    >
+                                        Stop
+                                    </Button>
+                                </Paper>
+                            );
+                        })}
                     </Stack>
                 )}
             </Box>
+        </Box>
+    );
+}
+
+/** The cover needs the full cart; the process list only knows its id. */
+function Placeholder({ cart }: { cart: Cart | undefined }) {
+    if (cart) {
+        return <CoverArt cart={cart} height={56} glyphSize={28} radius="8px" />;
+    }
+    return (
+        <Box
+            sx={{
+                width: 56,
+                height: 56,
+                borderRadius: "8px",
+                bgcolor: "action.hover",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+            }}
+        >
+            <MsIcon sx={{ fontSize: 28, color: "text.secondary" }}>videogame_asset</MsIcon>
         </Box>
     );
 }

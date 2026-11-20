@@ -1,29 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { makeBackend } from "@/__mocks__/backend";
 import { App } from "./App";
 
 const mocks = vi.hoisted(() => ({
     configured: true,
     loading: false,
-    invoke: vi.fn(async (cmd: string) => {
-        if (cmd === "get_setup_state") {
-            if (mocks.loading) {
-                return new Promise(() => undefined);
-            }
-            return { configured: mocks.configured, library: "/games", dosbox: "/usr/bin/dosbox" };
-        }
-        if (cmd === "discover_carts") {
-            return [{ id: "doom", dir: "/games/doom", info: { name: "Doom", category: "Action" } }];
-        }
-        if (cmd === "get_dosbox_versions") {
-            return { default: "DOSBox", versions: [{ name: "DOSBox", path: "/usr/bin/dosbox" }] };
-        }
-        if (cmd === "get_cart_summaries") {
-            return { doom: { lastRun: "2026-01-01T00:00:00Z", runs: 2, elapsed: 3600 } };
-        }
-        return [];
-    }),
+    invoke: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -31,13 +15,29 @@ vi.mock("@tauri-apps/api/core", () => ({
     invoke: mocks.invoke,
 }));
 
+const backend = makeBackend();
+
 describe("App", () => {
     afterEach(() => {
         mocks.configured = true;
         mocks.loading = false;
+        mocks.invoke.mockReset();
     });
 
+    function install() {
+        mocks.invoke.mockImplementation(async (command: string, args: Record<string, unknown>) => {
+            if (command === "get_setup_state" && mocks.loading) {
+                return new Promise(() => undefined);
+            }
+            if (command === "get_setup_state") {
+                return { configured: mocks.configured, library: "/games", dosbox: "/usr/bin/dosbox" };
+            }
+            return backend(command, args);
+        });
+    }
+
     it("renders the library page after loading", async () => {
+        install();
         render(<App />);
         expect(await screen.findByText("Doom")).toBeTruthy();
         expect(screen.getAllByText("Library").length).toBeGreaterThan(0);
@@ -45,6 +45,7 @@ describe("App", () => {
 
     it("renders the setup wizard on first run", async () => {
         mocks.configured = false;
+        install();
         render(<App />);
         expect(await screen.findByText("Welcome to Retrium")).toBeTruthy();
         expect(screen.queryByText("Library")).toBeNull();
@@ -52,13 +53,15 @@ describe("App", () => {
 
     it("renders a loading screen while the setup state is unknown", async () => {
         mocks.loading = true;
+        install();
         render(<App />);
         const marks = await screen.findAllByText("RETRIUM");
         expect(marks.length).toBeGreaterThan(0);
         expect(screen.queryByText("Doom")).toBeNull();
     });
 
-    it("toggles the theme and refreshes the library from the top bar", async () => {
+    it("toggles the theme and rescans the library from the top bar", async () => {
+        install();
         const user = userEvent.setup();
         render(<App />);
         await screen.findByText("Doom");

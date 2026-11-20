@@ -3,68 +3,120 @@ import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MsIcon } from "@/components/MsIcon";
-import type { DosboxVersions } from "@/types";
+import { api } from "@/lib/api";
+import type { LaunchInfo } from "@/types";
 
 interface RunSplitButtonProps {
-    dosboxVersions: DosboxVersions;
-    onRun: (version: string) => void;
+    cartId: string;
+    running: boolean;
+    onRun: (targetId: string) => void;
 }
 
-/** Run button with a dropdown to pick a specific DOSBox version. */
-export function RunSplitButton({ dosboxVersions, onRun }: RunSplitButtonProps) {
+/**
+ * Run button driven by `Config/launch.json`.
+ *
+ * The main button is the `default` target and says so in the author's own words.
+ * The dropdown lists every target so a setup program can be reached without
+ * editing the file; picking one does not change `default` — that is an edit, not
+ * a run. With a single target the button collapses into a plain button, and a
+ * broken `launch.json` disables it with the reason shown rather than guessing an
+ * executable.
+ */
+export function RunSplitButton({ cartId, running, onRun }: RunSplitButtonProps) {
+    const [launch, setLaunch] = useState<LaunchInfo | null>(null);
     const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
-    const defaultVersion =
-        dosboxVersions.versions.find((v) => v.name === dosboxVersions.default) ?? dosboxVersions.versions[0];
-    const disabled = dosboxVersions.versions.length === 0;
+    useEffect(() => {
+        let active = true;
+        api.getCartLaunch(cartId)
+            .then((info) => {
+                if (active) {
+                    setLaunch(info);
+                }
+            })
+            .catch((error: unknown) => {
+                if (active) {
+                    setLaunch({ targets: [], error: String(error) });
+                }
+            });
+        return () => {
+            active = false;
+        };
+    }, [cartId]);
+
+    const targets = launch?.targets ?? [];
+    const error = launch?.error;
+    const defaultTarget = targets.find((target) => target.id === launch?.defaultTarget) ?? targets[0];
+    const disabled = running || error !== undefined || defaultTarget === undefined;
+    const multi = targets.length > 1;
 
     return (
-        <Stack direction="row">
-            <Button
-                data-testid="run-default"
-                variant="contained"
-                startIcon={<MsIcon>play_arrow</MsIcon>}
-                disabled={disabled}
-                onClick={() => defaultVersion && onRun(defaultVersion.name)}
-                sx={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
-            >
-                Run {defaultVersion ? `· ${defaultVersion.name.split(" ")[0]}` : ""}
-            </Button>
-            <Button
-                aria-label="Choose DOSBox version"
-                variant="contained"
-                disabled={disabled}
-                onClick={(event) => setAnchorEl(event.currentTarget)}
-                sx={{
-                    borderTopLeftRadius: 0,
-                    borderBottomLeftRadius: 0,
-                    minWidth: 0,
-                    px: 1,
-                    borderLeft: "1px solid rgba(0,0,0,0.25)",
-                }}
-            >
-                <MsIcon>expand_more</MsIcon>
-            </Button>
-            <Menu anchorEl={anchorEl} open={anchorEl !== null} onClose={() => setAnchorEl(null)}>
-                <Typography variant="caption" color="text.secondary" sx={{ pl: 2, display: "block", pt: 0.5 }}>
-                    DOSBox version
-                </Typography>
-                {dosboxVersions.versions.map((version) => (
-                    <MenuItem
-                        key={version.name}
-                        onClick={() => {
-                            setAnchorEl(null);
-                            onRun(version.name);
+        <Stack spacing={0.5}>
+            <Stack direction="row">
+                <Button
+                    data-testid="run-default"
+                    variant="contained"
+                    startIcon={<MsIcon>play_arrow</MsIcon>}
+                    disabled={disabled}
+                    onClick={() => defaultTarget && onRun(defaultTarget.id)}
+                    sx={multi ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : undefined}
+                >
+                    {defaultTarget ? `Run ${defaultTarget.label}` : "Run"}
+                </Button>
+                {multi && (
+                    <Button
+                        aria-label="Choose target"
+                        variant="contained"
+                        disabled={disabled}
+                        onClick={(event) => setAnchorEl(event.currentTarget)}
+                        sx={{
+                            borderTopLeftRadius: 0,
+                            borderBottomLeftRadius: 0,
+                            minWidth: 0,
+                            px: 1,
+                            borderLeft: "1px solid rgba(0,0,0,0.25)",
                         }}
-                        sx={{ fontFamily: '"IBM Plex Mono", monospace', fontSize: 13.5 }}
                     >
-                        {version.name}
-                        {version.name === dosboxVersions.default ? " · default" : ""}
-                    </MenuItem>
-                ))}
-            </Menu>
+                        <MsIcon>expand_more</MsIcon>
+                    </Button>
+                )}
+                <Menu anchorEl={anchorEl} open={anchorEl !== null} onClose={() => setAnchorEl(null)}>
+                    {targets.map((target) => (
+                        <MenuItem
+                            key={target.id}
+                            data-testid={`run-target-${target.id}`}
+                            onClick={() => {
+                                setAnchorEl(null);
+                                onRun(target.id);
+                            }}
+                            sx={{ display: "block" }}
+                        >
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                {target.label}
+                            </Typography>
+                            <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ fontFamily: '"IBM Plex Mono", monospace', display: "block" }}
+                            >
+                                {target.executable}
+                            </Typography>
+                        </MenuItem>
+                    ))}
+                </Menu>
+            </Stack>
+            {error !== undefined && (
+                <Typography
+                    data-testid="launch-error"
+                    variant="caption"
+                    color="error"
+                    sx={{ maxWidth: 320, wordBreak: "break-word" }}
+                >
+                    Launch configuration is invalid: {error}
+                </Typography>
+            )}
         </Stack>
     );
 }

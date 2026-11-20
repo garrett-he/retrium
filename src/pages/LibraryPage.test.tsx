@@ -1,51 +1,32 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { civilization, doom, makeBackend, processFor, wolfenstein } from "@/__mocks__/backend";
 import { CartsProvider } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
+import type { ImportReport } from "@/types";
 import { LibraryPage } from "./LibraryPage";
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 
 vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: vi.fn((p: string) => p), invoke }));
 
-const carts = [
-    {
-        id: "doom",
-        dir: "/games/doom",
-        cover: "/games/doom/.retrium/cover.png",
-        info: { name: "Doom", category: "Action", release: 1993, tags: ["FPS"] },
-    },
-    { id: "wolf", dir: "/games/wolf", info: { name: "Wolfenstein", category: "Action", release: 1992 } },
-    { id: "civ", dir: "/games/civ", info: { name: "Civilization", category: "Strategy", release: 1991 } },
-];
-
-function mockResponse(cmd: string) {
-    if (cmd === "get_setup_state") {
-        return { configured: true, library: "/games", dosbox: "/usr/bin/dosbox" };
-    }
-    if (cmd === "discover_carts") {
-        return carts;
-    }
-    if (cmd === "get_dosbox_versions") {
-        return { default: "DOSBox", versions: [{ name: "DOSBox", path: "/usr/bin/dosbox" }] };
-    }
-    if (cmd === "get_cart_summaries") {
-        return { doom: { lastRun: "2026-01-02T00:00:00Z", runs: 3, elapsed: 5400 } };
-    }
-    if (cmd === "list_cart_processes") {
-        return [];
-    }
-    if (cmd === "add_carts") {
-        return [{ id: "keen", dir: "/games/keen", info: { name: "Keen" } }];
-    }
-    return [];
-}
-
-function mockBackend() {
-    invoke.mockImplementation(async (cmd: string) => mockResponse(cmd));
-}
+const report: ImportReport = {
+    imported: [doom],
+    skipped: [{ archive: "/carts/broken.cart", id: "", reason: "Not a Retrium cart" }],
+    pending: [
+        {
+            archive: "/carts/doom-v3.cart",
+            id: doom.id,
+            name: "Doom",
+            decision: "conflict",
+            message: "same revision, different content",
+            existingRevision: 3,
+            incomingRevision: 3,
+        },
+    ],
+};
 
 function renderPage() {
     return render(
@@ -64,34 +45,37 @@ function renderPage() {
 
 describe("LibraryPage", () => {
     beforeEach(() => {
-        mockBackend();
+        invoke.mockReset();
+        invoke.mockImplementation(makeBackend());
     });
 
-    it("renders discovered carts without the stats overview", async () => {
+    it("renders discovered carts with their playtime", async () => {
         renderPage();
         expect(await screen.findByText("Doom")).toBeTruthy();
-        expect(screen.getByText("Wolfenstein")).toBeTruthy();
+        expect(screen.getByText("Wolfenstein 3D")).toBeTruthy();
         expect(screen.getByText("1h 30m")).toBeTruthy();
         expect(screen.queryByText("Total playtime")).toBeNull();
-        expect(screen.queryByText("Running now")).toBeNull();
-        expect(screen.queryByText("Categories")).toBeNull();
+    });
+
+    it("marks carts with unexported changes", async () => {
+        renderPage();
+        await screen.findByText("Doom");
+        expect(screen.getByTestId(`dirty-${doom.id}`)).toBeTruthy();
     });
 
     it("filters carts by category from the dropdown", async () => {
+        invoke.mockImplementation(
+            makeBackend({ carts: [doom, { ...wolfenstein, info: { ...wolfenstein.info, category: "demo" } }] }),
+        );
         const user = userEvent.setup();
         renderPage();
         await screen.findByText("Doom");
 
         await user.click(screen.getByRole("combobox", { name: "Category" }));
-        await user.click(await screen.findByRole("option", { name: "Strategy" }));
+        await user.click(await screen.findByRole("option", { name: "demo" }));
 
         expect(screen.queryByText("Doom")).toBeNull();
-        expect(screen.getByText("Civilization")).toBeTruthy();
-
-        await user.click(screen.getByRole("combobox", { name: "Category" }));
-        await user.click(await screen.findByRole("option", { name: "All" }));
-
-        expect(await screen.findByText("Doom")).toBeTruthy();
+        expect(screen.getByText("Wolfenstein 3D")).toBeTruthy();
     });
 
     it("filters by search and offers a clear action", async () => {
@@ -106,25 +90,58 @@ describe("LibraryPage", () => {
         expect(await screen.findByText("Doom")).toBeTruthy();
     });
 
-    it("switches between grid and list views", async () => {
+    it("shows the revision column in list view", async () => {
         const user = userEvent.setup();
         renderPage();
         await screen.findByText("Doom");
 
         await user.click(screen.getByRole("button", { name: "Toggle view" }));
-        expect(screen.getByText("Cart")).toBeTruthy();
-        expect(screen.getByText("Playtime")).toBeTruthy();
+        expect(screen.getByText("Revision")).toBeTruthy();
+        expect(screen.getByText("r3")).toBeTruthy();
     });
 
-    it("adds carts from the library folder and reports the result", async () => {
+    it("imports carts and reports the result", async () => {
+        invoke.mockImplementation(makeBackend({ importReport: report }));
         const user = userEvent.setup();
         renderPage();
         await screen.findByText("Doom");
 
         await user.click(screen.getByRole("button", { name: "Add carts" }));
 
-        expect(await screen.findByText("1 new carts added")).toBeTruthy();
         expect(invoke).toHaveBeenCalledWith("add_carts");
+        expect(await screen.findByText("1 imported")).toBeTruthy();
+        expect(screen.getByText("Not a Retrium cart")).toBeTruthy();
+        expect(screen.getByText("same revision, different content")).toBeTruthy();
+    });
+
+    it("never applies a conflicting import on its own", async () => {
+        invoke.mockImplementation(makeBackend({ importReport: report }));
+        const user = userEvent.setup();
+        renderPage();
+        await screen.findByText("Doom");
+
+        await user.click(screen.getByRole("button", { name: "Add carts" }));
+        await screen.findByText("1 imported");
+
+        expect(invoke).not.toHaveBeenCalledWith("resolve_import", expect.anything());
+
+        await user.click(screen.getByRole("button", { name: "Replace local" }));
+        expect(invoke).toHaveBeenCalledWith("resolve_import", { archive: "/carts/doom-v3.cart", action: "apply" });
+        expect(await screen.findByText("Doom imported")).toBeTruthy();
+    });
+
+    it("skips a pending import without touching the backend", async () => {
+        invoke.mockImplementation(makeBackend({ importReport: report }));
+        const user = userEvent.setup();
+        renderPage();
+        await screen.findByText("Doom");
+
+        await user.click(screen.getByRole("button", { name: "Add carts" }));
+        await screen.findByText("1 imported");
+
+        await user.click(screen.getByRole("button", { name: "Skip" }));
+        expect(screen.queryByText("Replace local")).toBeNull();
+        expect(invoke).not.toHaveBeenCalledWith("resolve_import", expect.anything());
     });
 
     it("deletes a cart through the confirmation dialog", async () => {
@@ -134,67 +151,74 @@ describe("LibraryPage", () => {
 
         await user.click(screen.getAllByLabelText("Cart menu")[0]);
         await user.click(screen.getByText("Delete"));
+        expect(screen.getByText(/will be removed/)).toBeTruthy();
 
-        expect(screen.getByText(/will be removed permanently/)).toBeTruthy();
         await user.click(screen.getByRole("button", { name: "Delete permanently" }));
-
-        expect(invoke).toHaveBeenCalledWith("delete_cart", expect.objectContaining({ cart: expect.anything() }));
+        expect(invoke).toHaveBeenCalledWith("delete_cart", { id: doom.id });
         expect(await screen.findByText("Doom deleted")).toBeTruthy();
     });
 
-    it("runs, opens the folder and exports from the card menu", async () => {
+    it("runs the default target and lists the other targets from the card menu", async () => {
         const user = userEvent.setup();
         renderPage();
         await screen.findByText("Doom");
 
         await user.click(screen.getAllByLabelText("Cart menu")[0]);
-        await user.click(screen.getByText("Run with default DOSBox"));
-        expect(invoke).toHaveBeenCalledWith(
-            "run_cart",
-            expect.objectContaining({ options: expect.objectContaining({ dosboxVersion: "DOSBox" }) }),
-        );
-        expect(await screen.findByText("Launched Doom in DOSBox")).toBeTruthy();
+        expect(await screen.findByText("Run with…")).toBeTruthy();
+        expect(screen.getByText("Sound setup")).toBeTruthy();
+
+        await user.click(screen.getByText("Run"));
+        expect(invoke).toHaveBeenCalledWith("run_cart", { id: doom.id, targetId: undefined });
+        expect(await screen.findByText("Launched Doom · Main game")).toBeTruthy();
+    });
+
+    it("runs a specific target from the card menu", async () => {
+        const user = userEvent.setup();
+        renderPage();
+        await screen.findByText("Doom");
+
+        await user.click(screen.getAllByLabelText("Cart menu")[0]);
+        await user.click(await screen.findByText("Sound setup"));
+
+        expect(invoke).toHaveBeenCalledWith("run_cart", { id: doom.id, targetId: "setup" });
+    });
+
+    it("opens the folder and exports from the card menu", async () => {
+        const user = userEvent.setup();
+        renderPage();
+        await screen.findByText("Doom");
 
         await user.click(screen.getAllByLabelText("Cart menu")[0]);
         await user.click(screen.getByText("Open folder"));
-        expect(invoke).toHaveBeenCalledWith("open_cart_folder", expect.anything());
-        expect(await screen.findByText("Opened /games/doom")).toBeTruthy();
+        expect(invoke).toHaveBeenCalledWith("open_cart_folder", { id: doom.id });
 
         await user.click(screen.getAllByLabelText("Cart menu")[0]);
-        await user.click(screen.getByText("Export cart"));
-        expect(invoke).toHaveBeenCalledWith("archive_cart", expect.anything());
-        expect(await screen.findByText("Exported Doom.cart")).toBeTruthy();
+        await user.click(screen.getByText("Export cart…"));
+        const dialog = await screen.findByRole("dialog");
+        await user.click(within(dialog).getByRole("button", { name: "Export cart…" }));
+        expect(invoke).toHaveBeenCalledWith("commit_cart", { id: doom.id, revision: 4 });
     });
 
     it("stops a running cart from the card menu", async () => {
-        invoke.mockImplementation(async (cmd: string) => {
-            if (cmd === "list_cart_processes") {
-                return [
-                    {
-                        pid: 7,
-                        cart: carts[0],
-                        dosboxVersion: "DOSBox",
-                        startedAt: new Date().toISOString(),
-                    },
-                ];
-            }
-            return mockResponse(cmd);
-        });
-
+        invoke.mockImplementation(makeBackend({ processes: [processFor(civilization)] }));
         const user = userEvent.setup();
         renderPage();
         expect(await screen.findByText("Running")).toBeTruthy();
 
-        await user.click(screen.getAllByLabelText("Cart menu")[0]);
-        await user.click(screen.getByText("Stop"));
+        const menus = screen.getAllByLabelText("Cart menu");
+        await user.click(menus[2]);
+        await user.click(await screen.findByText("Stop"));
 
-        expect(invoke).toHaveBeenCalledWith("stop_cart", expect.anything());
-        expect(await screen.findByText("Doom stopped")).toBeTruthy();
+        expect(invoke).toHaveBeenCalledWith("stop_cart", { id: civilization.id });
+        expect(await screen.findByText("Civilization stopped")).toBeTruthy();
     });
 
     it("renders the cover image when a cart provides one", async () => {
+        invoke.mockImplementation(
+            makeBackend({ carts: [{ ...doom, cover: "/games/installed/doom/Resources/cover.png" }] }),
+        );
         renderPage();
-        const cover = await screen.findByTestId("cover-doom");
+        const cover = await screen.findByTestId(`cover-${doom.id}`);
         expect(cover.querySelector("img")).toBeTruthy();
     });
 
@@ -213,7 +237,7 @@ describe("LibraryPage", () => {
         await screen.findByText("Doom");
 
         await user.click(screen.getByRole("button", { name: "Toggle view" }));
-        await user.click(screen.getAllByText("Wolfenstein")[0]);
+        await user.click(screen.getAllByText("Wolfenstein 3D")[0]);
         expect(await screen.findByText("detail view")).toBeTruthy();
     });
 
@@ -224,7 +248,16 @@ describe("LibraryPage", () => {
 
         await user.click(screen.getByRole("button", { name: "Toggle view" }));
         await user.click(screen.getAllByLabelText("Cart menu")[0]);
-        expect(await screen.findByText("Run with default DOSBox")).toBeTruthy();
+        expect(await screen.findByText("Run")).toBeTruthy();
         expect(screen.queryByText("detail view")).toBeNull();
+    });
+
+    it("invites an import when the library is empty", async () => {
+        invoke.mockImplementation(makeBackend({ carts: [] }));
+        renderPage();
+
+        expect(await screen.findByText("The shelf is empty")).toBeTruthy();
+        expect(screen.getByText("Import a .cart file to put something on it.")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Import .cart" })).toBeTruthy();
     });
 });
