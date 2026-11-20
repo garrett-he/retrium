@@ -1,4 +1,13 @@
-import { createContext, createElement, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import {
+    createContext,
+    createElement,
+    type ReactNode,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
 import { type Dictionary, en, type StringKey } from "./en";
 import { zhCN } from "./zh-CN";
 
@@ -46,8 +55,30 @@ function translate(language: Language, key: string, params?: Params): string {
     return template === undefined ? key : fill(template, params);
 }
 
-function storedLanguage(): Language {
-    return localStorage.getItem(STORAGE_KEY) === "zh-CN" ? "zh-CN" : "en";
+function storedLanguage(): Language | null {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored === "en" || stored === "zh-CN" ? stored : null;
+}
+
+/**
+ * System language on first launch. Every `zh-*` tag (Simplified, Traditional,
+ * any region) falls back to the one Chinese dictionary we ship; everything
+ * else uses English. `navigator.languages` is tried before the single tag so a
+ * Chinese user with an English system default still lands on Chinese.
+ */
+function systemLanguage(): Language {
+    const tags = navigator.languages?.length ? navigator.languages : [navigator.language];
+    const chinese = tags.some((tag) => tag.toLowerCase().startsWith("zh"));
+    return chinese ? "zh-CN" : "en";
+}
+
+/**
+ * A stored choice always wins. When nothing is stored the system language is
+ * re-read on every launch, so changing the OS language takes effect until the
+ * user picks one in Settings — from then on the choice is fixed.
+ */
+function initialLanguage(): Language {
+    return storedLanguage() ?? systemLanguage();
 }
 
 export interface I18n {
@@ -62,12 +93,19 @@ const I18nContext = createContext<I18n | null>(null);
  * UI language, stored next to the theme preference rather than in
  * `config.json`: it is presentation, not application state, and the backend
  * never needs it.
+ *
+ * Only an explicit choice is persisted — see `initialLanguage` for why the
+ * detected default is deliberately not written back.
  */
 export function I18nProvider({ children }: { children: ReactNode }) {
-    const [language, setLanguage] = useState<Language>(storedLanguage);
+    const [language, setLanguageState] = useState<Language>(initialLanguage);
+
+    const setLanguage = useCallback((next: Language) => {
+        localStorage.setItem(STORAGE_KEY, next);
+        setLanguageState(next);
+    }, []);
 
     useEffect(() => {
-        localStorage.setItem(STORAGE_KEY, language);
         document.documentElement.lang = language;
     }, [language]);
 
@@ -77,7 +115,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
             setLanguage,
             t: ((key: string, params?: Params) => translate(language, key, params)) as TFunction,
         }),
-        [language],
+        [language, setLanguage],
     );
 
     return createElement(I18nContext.Provider, { value }, children);
