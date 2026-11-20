@@ -36,7 +36,7 @@
                 "ext": ["cart"],
                 "name": "Retrium Cart",
                 "description": "Retrium cart archive",
-                "mime-type": "application/x-retrium-cart"
+                "mimeType": "application/x-retrium-cart"
             }
         ],
         "icon": [
