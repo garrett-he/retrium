@@ -259,6 +259,7 @@ export const zhCN: Dictionary = {
     "import.action.duplicate": "仍然导入",
     "import.revisionFlow": "r{from} → r{to}",
     "import.toast.imported": "已导入 {name}",
+    "import.toast.report": "已导入 {imported} 个，跳过 {skipped} 个",
     "import.toast.importedAnon": "已导入",
 
     // 时长图表 ---------------------------------------------------------------

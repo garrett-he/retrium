@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { ImportReportDialog } from "@/components/ImportReportDialog";
 import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
+import { useT } from "@/i18n";
 import { api } from "@/lib/api";
+import { importResultMessage, importResultSeverity, needsDecision } from "@/lib/importResult";
 import type { ImportReport } from "@/types";
 
 /**
@@ -11,13 +13,14 @@ import type { ImportReport } from "@/types";
  * files, queued by the backend at startup or by a second instance.
  *
  * The queue is drained once on mount (catching paths that arrived before this
- * component existed) and then on every `pending-imports` event. The report
- * dialog is the same one the manual import flow shows, so pending upgrades,
- * conflicts and downgrades keep their explicit-decision behaviour.
+ * component existed) and then on every `pending-imports` event. Plain outcomes
+ * are announced with a toast; only reports that need a decision open the
+ * dialog, because a toast cannot collect the click.
  */
 export function ImportRequests() {
     const { importCarts } = useCartsContext();
     const { notify } = useSnackbar();
+    const t = useT();
     const [report, setReport] = useState<ImportReport | null>(null);
     const draining = useRef(false);
 
@@ -35,8 +38,13 @@ export function ImportRequests() {
                     return;
                 }
                 const result = await importCarts(paths);
-                if (!cancelled) {
+                if (cancelled) {
+                    return;
+                }
+                if (needsDecision(result)) {
                     setReport(result);
+                } else {
+                    notify(importResultMessage(result, t), importResultSeverity(result));
                 }
             } catch (error) {
                 if (!cancelled) {
@@ -53,7 +61,7 @@ export function ImportRequests() {
             cancelled = true;
             void subscription.then((unlisten) => unlisten());
         };
-    }, [importCarts, notify]);
+    }, [importCarts, notify, t]);
 
     if (!report) {
         return null;

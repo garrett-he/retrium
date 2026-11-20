@@ -30,6 +30,7 @@ import { useCartsContext } from "@/hooks/useCarts";
 import { useSnackbar } from "@/hooks/useSnackbar";
 import { categoryLabel, useT } from "@/i18n";
 import { api } from "@/lib/api";
+import { importResultMessage, importResultSeverity, needsDecision } from "@/lib/importResult";
 import type { Cart, ImportReport } from "@/types";
 
 type SortKey = "recent" | "name" | "year";
@@ -136,7 +137,11 @@ export function LibraryPage() {
                     notify(t("library.toast.noneSelected"), "info");
                     return;
                 }
-                setReport(result);
+                if (needsDecision(result)) {
+                    setReport(result);
+                } else {
+                    notify(importResultMessage(result, t), importResultSeverity(result));
+                }
             })
             .catch((error) => notify(String(error), "error"))
             .finally(() => setAdding(false));

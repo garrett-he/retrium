@@ -272,6 +272,7 @@ export const en = {
     "import.action.duplicate": "Import anyway",
     "import.revisionFlow": "r{from} → r{to}",
     "import.toast.imported": "{name} imported",
+    "import.toast.report": "{imported} imported, {skipped} skipped",
     "import.toast.importedAnon": "Imported",
 
     // Playtime chart ---------------------------------------------------------
