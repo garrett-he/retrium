@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
@@ -61,8 +61,6 @@ fn sync_index(layout: &Layout, db: &Db) -> Result<(), String> {
     Ok(())
 }
 
-
-#[allow(dead_code)]
 fn is_running(state: &State<'_, AppState>, id: &str) -> Result<bool, String> {
     Ok(state.processes.lock().map_err(|e| e.to_string())?.contains_key(id))
 }
@@ -172,10 +170,10 @@ pub fn list_cart_processes(state: State<'_, AppState>) -> Result<Vec<CartProcess
 
 #[tauri::command]
 pub fn stop_all_carts(state: State<'_, AppState>) -> Result<usize, String> {
-    let mut processes = state.processes.lock().map_err(|e| e.to_string())?;
+    let processes = state.processes.lock().map_err(|e| e.to_string())?;
     let stopped = processes.len();
-    for (_, handle) in processes.drain() {
-        let _ = handle.kill_tx.send(());
+    for handle in processes.values() {
+        let _ = handle.kill.send(());
     }
     Ok(stopped)
 }
@@ -340,10 +338,7 @@ fn pending_message(decision: crate::ImportDecision, analyzed: &crate::import::An
 /// Pick carts and import whatever needs no decision. Anything ambiguous comes
 /// back in `pending` and is applied later by `resolve_import`.
 #[tauri::command]
-pub async fn add_carts(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<crate::ImportReport, String> {
+pub async fn add_carts(app: AppHandle, state: State<'_, AppState>) -> Result<crate::ImportReport, String> {
     let files = app
         .dialog()
         .file()
@@ -386,16 +381,14 @@ pub async fn add_carts(
             };
 
             match analyzed.outcome {
-                crate::import::Outcome::New => {
-                    match crate::import::import_new(&session.layout, db, &analyzed) {
-                        Ok(cart) => report.imported.push(cart),
-                        Err(reason) => report.skipped.push(crate::ImportNote {
-                            archive,
-                            id: analyzed.id().to_string(),
-                            reason,
-                        }),
-                    }
-                }
+                crate::import::Outcome::New => match crate::import::import_new(&session.layout, db, &analyzed) {
+                    Ok(cart) => report.imported.push(cart),
+                    Err(reason) => report.skipped.push(crate::ImportNote {
+                        archive,
+                        id: analyzed.id().to_string(),
+                        reason,
+                    }),
+                },
                 crate::import::Outcome::Idempotent => report.skipped.push(crate::ImportNote {
                     archive,
                     id: analyzed.id().to_string(),
@@ -449,13 +442,172 @@ pub fn resolve_import(
                 let summary = db.get_summary(&id)?;
                 Some(cart_from(&record, &session.layout, summary))
             }
-            crate::import::Outcome::New => {
-                Some(crate::import::import_new(&session.layout, db, &analyzed)?)
-            }
-            crate::import::Outcome::Pending(_) => {
-                Some(crate::import::replace(&session.layout, db, &analyzed)?)
-            }
+            crate::import::Outcome::New => Some(crate::import::import_new(&session.layout, db, &analyzed)?),
+            crate::import::Outcome::Pending(_) => Some(crate::import::replace(&session.layout, db, &analyzed)?),
         };
         Ok(cart)
     })
+}
+
+// ---------------------------------------------------------------------------
+// Launch
+// ---------------------------------------------------------------------------
+
+/// The targets the Run button should offer. A broken `launch.json` is reported
+/// instead of guessed: the UI disables the button and shows the reason.
+#[tauri::command]
+pub fn get_cart_launch(id: String, state: State<'_, AppState>) -> Result<crate::LaunchInfo, String> {
+    let session = session(&state)?;
+    let path = session.layout.install_dir(&id).join(library::LAUNCH_ENTRY);
+
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return Ok(crate::LaunchInfo {
+                targets: Vec::new(),
+                default_target: None,
+                error: Some(format!("{}: {error}", path.display())),
+            })
+        }
+    };
+
+    match crate::launch::Launch::from_bytes(&bytes) {
+        Ok(launch) => Ok(crate::LaunchInfo {
+            targets: launch
+                .targets
+                .iter()
+                .map(|target| crate::TargetInfo {
+                    id: target.id.clone(),
+                    label: target.label.clone(),
+                    executable: target.executable.clone(),
+                })
+                .collect(),
+            default_target: Some(launch.default_target().id.clone()),
+            error: None,
+        }),
+        Err(error) => Ok(crate::LaunchInfo {
+            targets: Vec::new(),
+            default_target: None,
+            error: Some(error.to_string()),
+        }),
+    }
+}
+
+/// Generate the conf, snapshot the working copy, start DOSBox and watch it.
+#[tauri::command]
+pub async fn run_cart(
+    id: String,
+    target_id: Option<String>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<CartProcess, String> {
+    if is_running(&state, &id)? {
+        return Err(format!("cart is already running: {id}"));
+    }
+
+    let session = session(&state)?;
+    let dosbox = session.config.require_dosbox()?.to_path_buf();
+
+    let prepared = crate::run::prepare(&session.layout, &id, target_id.as_deref(), &dosbox, crate::APP_VERSION)?;
+    let marker = crate::run::begin(&session.layout, &id, &prepared.baseline)?;
+
+    let mut command = tokio::process::Command::new(&prepared.dosbox);
+    command
+        .current_dir(&prepared.program_dir)
+        .arg("-noconfig")
+        .arg("-conf")
+        .arg(&prepared.conf_path);
+
+    let child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            let _ = std::fs::remove_file(&marker);
+            return Err(format!(
+                "failed to start DOSBox ({}): {error}. Check Settings.",
+                prepared.dosbox.display()
+            ));
+        }
+    };
+
+    let pid = child.id().ok_or_else(|| "failed to read the process id".to_string())?;
+    let started_at = chrono::Utc::now();
+    let (kill, mut kill_rx) = tokio::sync::watch::channel(());
+
+    state.processes.lock().map_err(|e| e.to_string())?.insert(
+        id.clone(),
+        crate::ProcessHandle {
+            pid,
+            cart_id: id.clone(),
+            target_id: prepared.target_id.clone(),
+            target_label: prepared.target_label.clone(),
+            started_at,
+            kill,
+        },
+    );
+
+    let process = CartProcess {
+        pid,
+        cart_id: id.clone(),
+        target_id: prepared.target_id.clone(),
+        target_label: prepared.target_label.clone(),
+        started_at: started_at.to_rfc3339(),
+    };
+
+    let library_root = session.layout.root.clone();
+    let app_handle = app.clone();
+    tokio::spawn(async move {
+        let mut child = child;
+        let start = std::time::Instant::now();
+
+        let _ = tokio::select! {
+            status = child.wait() => status,
+            _ = kill_rx.changed() => {
+                let _ = child.kill().await;
+                child.wait().await
+            }
+        };
+
+        // Fold the run's writes into State/ before anyone can export.
+        let layout = Layout::new(&library_root);
+        let _ = crate::run::finish(&layout, &id);
+
+        let seconds = start.elapsed().as_secs() as i64;
+        crate::commands::record_run(&app_handle, &id, seconds);
+
+        if let Some(state) = app_handle.try_state::<AppState>() {
+            if let Ok(mut processes) = state.processes.lock() {
+                processes.remove(&id);
+            }
+        }
+    });
+
+    Ok(process)
+}
+
+/// Ask a running cart to stop. The watcher task cleans up once the process is
+/// really gone, so the cart stays "running" until then.
+#[tauri::command]
+pub fn stop_cart(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let processes = state.processes.lock().map_err(|e| e.to_string())?;
+    match processes.get(&id) {
+        Some(handle) => {
+            let _ = handle.kill.send(());
+            Ok(())
+        }
+        None => Err(format!("cart is not running: {id}")),
+    }
+}
+
+/// One `UPSERT` per run, into the index instead of a JSON file.
+pub fn record_run(app: &AppHandle, id: &str, seconds: i64) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let _ = with_db(&state, |db| {
+        let mut summary = db.get_summary(id)?.unwrap_or_default();
+        summary.runs += 1;
+        summary.elapsed += seconds;
+        summary.last_run = chrono::Utc::now().to_rfc3339();
+        db.set_summary(id, &summary)
+    });
 }

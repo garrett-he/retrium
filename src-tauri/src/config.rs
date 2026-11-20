@@ -133,7 +133,7 @@ pub fn probe_version(path: &Path) -> Option<String> {
         let _ = tx.send(buffer);
     });
 
-    let deadline = Instant::now() + Duration::from_millis(1500);
+    let deadline = Instant::now() + Duration::from_millis(500);
     loop {
         match child.try_wait() {
             Ok(Some(_)) => break,

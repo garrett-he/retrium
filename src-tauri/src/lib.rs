@@ -7,6 +7,7 @@ pub mod import;
 pub mod launch;
 pub mod library;
 pub mod manifest;
+pub mod run;
 pub mod state;
 
 use std::collections::{BTreeMap, HashMap};
@@ -231,11 +232,7 @@ pub struct SetupState {
 
 /// Build the UI-facing `Cart` from an index row plus the local facts that are
 /// not in the archive (cover file, commit cache, run summary).
-pub fn cart_from(
-    record: &db::CartRecord,
-    layout: &library::Layout,
-    summary: Option<db::Summary>,
-) -> Cart {
+pub fn cart_from(record: &db::CartRecord, layout: &library::Layout, summary: Option<db::Summary>) -> Cart {
     let id = &record.manifest.cart.id;
     let cover = layout.install_dir(id).join("Resources/cover.png");
     let has_cover = cover.is_file();
@@ -247,8 +244,7 @@ pub fn cart_from(
         author: record.manifest.cart.author.clone(),
         created_at: record.manifest.cart.created_at.clone(),
         cover: has_cover.then(|| cover.to_string_lossy().to_string()),
-        dirty: library::read_commit(layout, id)
-            .map(|commit| commit.package_hash != record.package_hash),
+        dirty: library::read_commit(layout, id).map(|commit| commit.package_hash != record.package_hash),
         summary: summary.map(|s| CartSummary {
             last_run: s.last_run,
             runs: s.runs,
@@ -264,8 +260,9 @@ pub struct ProcessHandle {
     pub target_id: String,
     pub target_label: String,
     pub started_at: chrono::DateTime<chrono::Utc>,
-    /// Sending a value kills the spawned process and ends the watcher task.
-    pub kill_tx: tokio::sync::oneshot::Sender<()>,
+    /// Flipping this kills the spawned process and ends the watcher task.
+    /// `watch` is used instead of a oneshot because stopping needs `&self`.
+    pub kill: tokio::sync::watch::Sender<()>,
 }
 
 pub struct AppState {
@@ -304,6 +301,9 @@ pub fn run() {
             commands::discover_carts,
             commands::add_carts,
             commands::resolve_import,
+            commands::get_cart_launch,
+            commands::run_cart,
+            commands::stop_cart,
             commands::stop_all_carts,
             commands::list_cart_processes,
             commands::get_cart_process,

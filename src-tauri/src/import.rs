@@ -260,7 +260,12 @@ mod tests {
     #[test]
     fn imports_a_new_cart_and_indexes_it() {
         let source = scratch("source-new");
-        let archive = build_cart(&source, "019ae4c1-2f3b-7c4d-8e9f-0a1b2c3d4e5f", 1, &[("Program/GAME.EXE", "x")]);
+        let archive = build_cart(
+            &source,
+            "019ae4c1-2f3b-7c4d-8e9f-0a1b2c3d4e5f",
+            1,
+            &[("Program/GAME.EXE", "x")],
+        );
 
         let (root, layout, db) = target_library();
         let analyzed = analyze(&db, &archive).unwrap();
@@ -310,10 +315,7 @@ mod tests {
             std::fs::read_to_string(layout.program_dir(id).join("GAME.EXE")).unwrap(),
             "v2"
         );
-        assert!(
-            save.is_file(),
-            "an upgrade must not throw the player's saves away"
-        );
+        assert!(save.is_file(), "an upgrade must not throw the player's saves away");
 
         std::fs::remove_dir_all(&source).unwrap();
         std::fs::remove_dir_all(&source2).unwrap();
