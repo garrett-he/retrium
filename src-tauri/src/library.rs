@@ -785,6 +785,65 @@ mod tests {
         std::fs::remove_dir_all(&root).unwrap();
     }
 
+    /// Rewrite an archive entry by entry, so a test can produce exactly one
+    /// shape violation while everything else stays valid.
+    fn rewrite(source: &Path, destination: &Path, rename: impl Fn(&str) -> String, drop: impl Fn(&str) -> bool) {
+        let mut source = open_archive(source).unwrap();
+        let file = std::fs::File::create(destination).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default();
+        for index in 0..source.len() {
+            let mut entry = source.by_index(index).unwrap();
+            let name = entry.name().to_string();
+            if drop(&name) {
+                continue;
+            }
+            zip.start_file(rename(&name), options).unwrap();
+            std::io::copy(&mut entry, &mut zip).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+
+    #[test]
+    fn rejects_a_wrapper_folder() {
+        let root = scratch("wrapper");
+        let archive = build_cart(&root, &[("Program/GAME.EXE", "x")]);
+
+        let broken = root.join("broken.cart");
+        rewrite(&archive, &broken, |name| format!("my-game/{name}"), |_| false);
+
+        let error = inspect(&broken).unwrap_err();
+        assert!(error.path.contains("my-game/"), "{}", error.path);
+        assert!(error.message.contains("only"), "{}", error.message);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn rejects_a_missing_hash_file() {
+        let root = scratch("no-hash");
+        let archive = build_cart(&root, &[("Program/GAME.EXE", "x")]);
+
+        let broken = root.join("broken.cart");
+        rewrite(&archive, &broken, str::to_string, |name| name == HASH_ENTRY);
+
+        let error = inspect(&broken).unwrap_err();
+        assert_eq!(error.path, HASH_ENTRY);
+        assert!(error.message.contains("missing"), "{}", error.message);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn explains_that_a_plain_zip_is_not_a_cart() {
+        let root = scratch("not-a-cart");
+        let path = root.join("plain.cart");
+        std::fs::write(&path, b"definitely not a zip").unwrap();
+
+        let error = inspect(&path).unwrap_err();
+        assert_eq!(error.path, "cart");
+        assert_eq!(error.message, "Not a Retrium cart (not a ZIP archive)");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
     #[test]
     fn rejects_a_tampered_archive() {
         let root = scratch("tamper");

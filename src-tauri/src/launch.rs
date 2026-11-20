@@ -324,7 +324,7 @@ impl Launch {
         }
 
         for (name, profile) in &self.profiles {
-            profile.validate(&format!("profiles.{name}")).map_err(|e| e)?;
+            profile.validate(&format!("profiles.{name}"))?;
         }
 
         Ok(())

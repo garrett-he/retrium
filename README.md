@@ -16,22 +16,22 @@
 
 ## Features
 
-- **Library management** — keep every cart in its own folder with cover art, metadata and tags.
-- **Rich metadata** — name, release year, category, language, developer, publisher, series and tags, all editable in the app.
+- **Library management** — every cart is an archive plus an installed copy, with cover art, metadata and tags.
+- **Rich metadata** — name, release year, category, language, developer, publisher, series, players, platform, DOS version and tags, all editable in the app.
 - **Browse and filter** — search, category filter, sorting and grid/list views.
-- **Multiple DOSBox versions** — register DOSBox, DOSBox-X or DOSBox Staging builds and pick the default or a specific one per launch.
-- **Per-cart configuration** — every cart carries its own `.retrium/dosbox.conf`.
-- **Saved states** — files written while a cart runs are mirrored into the library and restored on the next launch.
-- **Play tracking** — last run, number of runs and total playtime per cart, plus a page of currently running carts.
-- **Import and export** — export a cart folder as a `.cart` archive and import it back into any library.
-- **First-run setup** — pick a library folder and DOSBox executable on first start; both can be changed later.
+- **Multiple launch targets** — a cart declares how it starts (`Config/launch.json`); the Run button uses the default and the dropdown offers the rest, so a sound setup program is one click away.
+- **Portable configuration** — carts carry launch settings, not a `dosbox.conf`. Retrium generates the conf at every launch, so the same cart behaves the same on any machine.
+- **Saved states** — files written while a cart runs are recorded as a difference layer and restored on the next launch, and are kept out of the exported archive.
+- **Versioned carts** — a cart has a permanent UUID and a revision you bump on export; the archive carries a content hash, so import can tell an upgrade from a conflict.
+- **Import and export** — export a cart as a `.cart` archive and import it into any library, with an explicit decision for upgrades, conflicts and downgrades.
+- **First-run setup** — pick a library folder and a DOSBox executable on first start; both can be changed later.
 - **Themes** — dark and light modes.
 
 ## Requirements
 
 - [Node.js](https://nodejs.org/) 22 or newer and [pnpm](https://pnpm.io/) 11
 - [Rust](https://www.rust-lang.org/tools/install) (stable) with the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your platform
-- A DOSBox executable (DOSBox, DOSBox-X or DOSBox Staging)
+- A DOSBox executable (DOSBox 0.74-3 is the reference; DOSBox-X and DOSBox Staging are best-effort). Retrium does not bundle it.
 
 ## Development
 
@@ -52,36 +52,44 @@ Retrium keeps everything inside the library folder you choose:
 ```text
 <library>/
 ├── carts/
-│   └── <sha1>/                 # cart id = SHA-1 of the imported .cart file
-│       ├── DOOM.EXE
-│       └── .retrium/
-│           ├── metadata.json   # cart metadata
-│           ├── cover.png       # optional cover art
-│           └── dosbox.conf     # optional DOSBox configuration
-├── states/
-│   └── <sha1>/                 # files saved during play, restored on launch
-└── summaries/
-    └── <sha1>.json             # last run, runs and elapsed time
+│   └── <uuid>.cart             # immutable archive: export source, recovery source
+├── installed/
+│   └── <uuid>/
+│       ├── Program/**          # mounted as C: — the working copy
+│       ├── Config/launch.json  # targets and profiles; the one file worth editing
+│       ├── Resources/cover.png
+│       └── Runtime/            # generated: dosbox.conf, baseline, State/ (saves)
+└── retrium.db                  # disposable index: carts and summaries
 ```
 
-A cart folder is called a **cart**. Exporting one writes a `<id>.cart` archive (zip format) that can be
-imported into any library; legacy `.zip`, `.tar.gz` and `.tgz` archives can still be imported. On import the
-archive contents are extracted into `carts/<sha1>/` and its SHA-1 becomes the cart id. Importing the same
-archive twice is refused with a duplicate-cart message rather than overwriting the existing cart.
+A **cart** is one program: a UUID that never changes, a revision you bump when you export, and a content
+hash that describes the bytes. Editing metadata or `launch.json` only changes the hash, so it shows up as an
+unexported change and becomes the next revision when you export — the cart keeps its identity either way.
 
-`metadata.json` is a plain JSON file, so libraries are easy to back up or edit by hand:
+A `.cart` file is a zip with the cart at its root:
+
+```text
+hash                      # SHA-256 over every other entry
+manifest.json             # identity (id, revision, author) and program metadata
+Program/**                # the program; C: when it runs
+Config/launch.json        # targets, profiles, pre-commands
+Resources/cover.png       # optional
+```
+
+`manifest.json` is plain JSON, so carts are easy to inspect or generate:
 
 ```json
 {
-  "name": "Doom",
-  "release": 1993,
-  "category": "Action",
-  "language": "English",
-  "developer": "id Software",
-  "publisher": "GT Interactive",
-  "tags": ["FPS"]
+  "version": 1,
+  "cart": { "id": "0192f0a1-…", "revision": 3, "tool": { "app": "retrium", "version": "0.2.1", "host": "windows-x86_64" }, "createdAt": "2026-01-01T00:00:00+00:00" },
+  "program": { "name": "Doom", "release": 1993, "category": "game", "language": "en", "developer": "id Software", "tags": ["FPS"] }
 }
 ```
+
+The full format — every field, the hash algorithm, the import rules — is documented in
+[`design/CART_FORMAT_V2.md`](./design/CART_FORMAT_V2.md), and
+[`skills/retrium-cart/`](./skills/retrium-cart) contains a validator and a template for building carts
+without the app.
 
 ## Tech stack
 

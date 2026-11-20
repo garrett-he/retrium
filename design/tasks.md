@@ -281,38 +281,44 @@
 
 ## P7 skill 与收尾
 
-### [ ] T30 Python 校验脚本 v2
+### [x] T30 Python 校验脚本 v2
 - 规模 L · ⛓T02
 - **改**：`skills/retrium-cart/scripts/validate_cart.py`
 - **做**：校验 ZIP 根布局与白名单、`hash` 文件、`manifest` 结构、`launch.json` 结构；重算 `tree_hash`（与 Rust 同编码）；读 `design/fixtures/hash-vectors.json` 自检
 - **完成**：对 Rust 生成的包给出 `OK`；对 T13 的 8 个坏包给出对应原因；黄金向量全过
+- **备注**：`CartSource` 统一 `cart`/文件夹两种输入；`--write-hash` 未通过校验时拒写。9 个坏包逐一给出预期原因（wrapper / 多余根条目 / 路径穿越 / 保留名 / 大小写重名 / hash 被改 / 缺 `launch.json` / revision 非法 / 可执行文件缺失）
 
-### [ ] T31 skill 文档与模板
+### [x] T31 skill 文档与模板
 - 规模 M · ⛓T30
 - **改**：`skills/retrium-cart/SKILL.md`、`references/cart-format.md`、`assets/cart-template/`
 - **做**：全面改为 v2 布局；模板改成 ZIP 根布局（`manifest.json` + `Config/launch.json`，删 `.retrium/`）
 - **完成**：按模板造一个 cart 能通过 `validate_cart.py`
+- **备注**：`references/dosbox-tuning.md` 一并重写。模板自测：复制模板 + 补 `GAME.EXE`/`SETUP.EXE` + `--write-hash` → `0 error(s), 1 warning`（无封面）
 
-### [ ] T32 清理死代码与依赖
+### [x] T32 清理死代码与依赖
 - 规模 M · ⛓T22 T26
 - **改**：`commands.rs`、`config.rs`、`Cargo.toml`、`lib.rs`
 - **做**：删 `sha1_of_file`、`run_watcher`、`create_zip`/`extract_zip` 旧实现、`summary_path`/`load_summary`/`save_summary`、`LegacyConfig`、`states/` 与 `summaries/` 相关路径、旧 `Cart.dir` 用法；Cargo 删 `sha1`/`hex`/`notify`
 - **完成**：`cargo clippy -D warnings` 通过；`grep -rn "sha1\|notify\|\.retrium" src-tauri/src/` 无命中
+- **备注**：`thiserror` 也一并删除（已全部改用 `FieldError` 手写实现）
 
-### [ ] T33 Rust 测试补齐
+### [x] T33 Rust 测试补齐
 - 规模 L · ⛓T32
 - **改**：各模块 `#[cfg(test)]`
 - **做**：按设计文档 §7 逐条落测；`cargo tarpaulin --fail-under 80` 达标
 - **完成**：`just test` 一键通过
+- **备注**：`just test` = 前端覆盖率 + `cargo test`，本机通过（86 个 Rust 用例）。覆盖率门槛拆成 `just coverage`——`cargo-tarpaulin` 只在 Linux 可用，Windows 上装不了，见 `AGENTS.md`
 
-### [ ] T34 前端测试更新
+### [x] T34 前端测试更新
 - 规模 L · ⛓T29
 - **改**：`App.test.tsx`、`LibraryPage.test.tsx`、`CartPage.test.tsx`、`RunningPage.test.tsx`、`SettingsPage.test.tsx`、`SetupPage.test.tsx`
 - **做**：mock 新命令签名；补 T24–T28 的交互用例
 - **完成**：`pnpm test` 全绿，`pnpm lint` 无告警
+- **备注**：新增 `src/__mocks__/backend.ts`，为每条命令提供默认应答，遇到未知命令直接报错，避免 mock 悄悄过期。70 个用例
 
-### [ ] T35 文档回写
+### [x] T35 文档回写
 - 规模 S · ⛓T32
 - **改**：`AGENTS.md`、`README.md`、`design/CART_FORMAT_V2.md` §6
 - **做**：数据模型与命令列表更新；把 `plan.md` §8 的三条偏差（`commit.json`、新增命令、导入两阶段）写进设计文档
 - **完成**：文档与代码的命名字段一一对得上
+- **备注**：三条偏差记在 `CART_FORMAT_V2.md` §6.1「落地情况」；`justfile` 拆出 `coverage`

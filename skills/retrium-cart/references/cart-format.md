@@ -1,129 +1,258 @@
 # Retrium cart format
 
-This reference documents the on-disk contract implemented by Retrium's Rust backend. It is derived from
-`src-tauri/src/lib.rs` (`Cart`, `CartInfo`) and `src-tauri/src/commands.rs` (discovery, import, launch,
-state mirroring). Load it when detailed field rules or edge cases matter.
+The on-disk contract of cart format **version 1**, as implemented by the Rust backend:
+
+| Concern | File |
+| --- | --- |
+| layout, ZIP safety, archive read/write | `src-tauri/src/library.rs` |
+| `tree_hash` | `src-tauri/src/hash.rs` |
+| `manifest.json` | `src-tauri/src/manifest.rs` |
+| `Config/launch.json` and generated `dosbox.conf` | `src-tauri/src/launch.rs` |
+| import decisions | `src-tauri/src/import.rs` |
+
+The design rationale lives in `design/CART_FORMAT_V2.md`. This file is the checklist.
+
+## Identity, revision, hash
+
+- **`cart.id`** — a UUID, canonical lowercase hyphenated (`0192f0a1-7c00-7000-8000-000000000001`). It is
+  chosen once and never changes, not even when the contents, metadata or `launch.json` change. Directories
+  and archive names are derived from it.
+- **`cart.revision`** — an integer `>= 1`, strictly increasing for a given id. Only the author moves it. In
+  the app the single write entry point is the export dialog; nothing else may change it.
+- **`hash`** — the fact, not the claim. A 64-character lowercase hex SHA-256 over every entry except the
+  root `hash` itself. Computed on export, verified on import.
+
+Two builds of the same program are one cart with a higher revision. Two builds that must coexist get two ids.
+
+## Archive layout
+
+A `.cart` is a ZIP with the cart at its **root** — no `Contents/`, no wrapper folder:
+
+```text
+hash                      # 64 hex + optional newline
+manifest.json
+Program/**                # C: when the cart runs
+Config/launch.json
+Resources/**              # cover.png lives here
+```
+
+Import rejects, with a field-scoped message:
+
+| Rule | Rejection |
+| --- | --- |
+| root name must be one of `hash`, `manifest.json`, `Program`, `Config`, `Resources` | `entry README.txt: only … are allowed at the archive root` |
+| no absolute paths, drive letters, backslashes, `.`/`..`, trailing dot/space, `CON`-style reserved names | `entry …: unsafe path` |
+| no symlinks, no encrypted entries | `entry …: symlinks are not allowed` |
+| no two entries equal after NFC + lowercase | `entry …: duplicates another entry (case or Unicode normalization)` |
+| at most 100 000 entries and 16 GiB uncompressed | `cart: too many entries` |
+| `hash`, `manifest.json`, `Config/launch.json` must exist | `<name>: missing from the archive` |
+
+## `manifest.json`
+
+Root `version` doubles as the magic number: missing or non-integer means "not a Retrium cart"; an integer
+other than `1` means "a version this build cannot read". It is unrelated to `cart.revision`.
+
+```json
+{
+    "version": 1,
+    "cart": {
+        "id": "0192f0a1-7c00-7000-8000-000000000001",
+        "revision": 3,
+        "author": { "name": "Garrett", "email": "garrett@example.com" },
+        "tool": { "app": "retrium", "version": "0.2.1", "host": "windows-x86_64" },
+        "createdAt": "2026-01-01T00:00:00+00:00"
+    },
+    "program": {
+        "name": "Doom",
+        "language": "en",
+        "release": 1993,
+        "category": "game",
+        "developer": "id Software",
+        "publisher": "GT Interactive",
+        "series": "Doom",
+        "tags": ["FPS"],
+        "players": 4,
+        "platform": "DOS",
+        "dos": { "version": "MS-DOS 5.0", "input": ["Keyboard"] },
+        "externalIds": { "mobygames": "1068" }
+    }
+}
+```
+
+| Field | Required | Rule |
+| --- | --- | --- |
+| `cart.id` | yes | UUID; must round-trip through `Uuid::parse_str` *and* be canonical lowercase |
+| `cart.revision` | yes | integer `>= 1` |
+| `cart.author` | no | when present, `name` non-empty; `email` if present must look like an address |
+| `cart.tool` | yes | `app`, `version`, `host` all non-empty |
+| `cart.createdAt` | yes | RFC 3339 with a timezone — it is the *build* time of this revision |
+| `program.name` | yes | non-empty |
+| `program.language` | no | BCP 47 syntax only; the value set is open (`zh-Hant`, `ja`, `en-US`) |
+| `program.release`, `program.players` | no | integers |
+| `program.category` | no | closed set of 8: `game application utility education demo development system reference` |
+| `program.tags` | no | array of strings, free-form |
+| `program.dos` | no | `version` string, `input` array of strings |
+| `program.externalIds` | no | keys lowercase `[a-z0-9_-]+`, values strings |
+
+Unknown keys are **ignored** (a future format may add fields). Author absent is a normal state; an empty
+`author` object is not — omit the key instead of writing `{}`.
+
+## The `hash` file
+
+```text
+record(path, bytes) = u32le(len(path_utf8)) || path_utf8 || sha256(bytes)   # 32 raw bytes
+hash                = sha256( concat( sort_bytewise( records ) ) )
+```
+
+- Directories are not entries. The only exclusion is the root-level `hash` file itself.
+- Sorting is over the **encoded record bytes**, not the path string — that is why the length prefix is
+  mandatory: without it `("ab", h)` and `("a", "b" + h)` would encode identically.
+- The file is one line of 64 lowercase hex; one trailing `\n` or `\r\n` is tolerated, anything else is
+  refused.
+- Consequences: re-zipping the same tree in another order, with other timestamps or another compression
+  level yields the same hash; editing `manifest.json` (even only `revision` or `createdAt`) yields a new one.
+
+Cross-language agreement is locked by `design/fixtures/hash-vectors.json`, read by both
+`hash.rs` (tests) and `validate_cart.py` (every run).
+
+## `Config/launch.json`
+
+```json
+{
+    "version": 1,
+    "default": "play",
+    "targets": [
+        {
+            "id": "play",
+            "label": "Main game",
+            "executable": "DOOM.EXE",
+            "arguments": ["-nosound"],
+            "workingDir": ".",
+            "profile": "high",
+            "preCommands": ["cd SOUND", "set BLASTER=A220 I7 D1 H5 T6"]
+        }
+    ],
+    "profiles": {
+        "high": {
+            "machine": "svga_s3",
+            "memsize": 16,
+            "cycles": "max",
+            "core": "dynamic",
+            "sound": ["sb16"],
+            "extra": { "sdl.output": "texture" }
+        }
+    }
+}
+```
+
+The schema is **closed** (`deny_unknown_fields`): a typo like `memory` instead of `memsize` fails at import
+with the field path, not silently at launch. `profiles.<name>.extra` is the only escape hatch.
+
+**target**
+
+| Field | Required | Rule |
+| --- | --- | --- |
+| `id` | yes | `^[a-z][a-z0-9_-]{0,31}$`, unique ignoring case |
+| `label` | yes | 1–40 characters; this is the Run button text |
+| `executable` | yes | relative path inside `Program/`, must exist |
+| `arguments` | no | ≤ 260 characters each, no `"`, newline or tab |
+| `workingDir` | no | default `.`; resolved against `Program/`, must exist |
+| `profile` | no | must name an entry in `profiles` |
+| `preCommands` | no | ≤ 16 entries, whitelist below |
+
+`default` is optional; absent means `targets[0]`. Pointing at an unknown id is an error.
+
+**profile**
+
+| Field | Rule |
+| --- | --- |
+| `machine` | one of `hercules cga_mono cga tandy pcjr ega vgaonly svga_s3 svga_et3000 svga_et4000 svga_paradise vesa_nolfb vesa_oldvbe` |
+| `memsize` | integer 1–63 (MB) |
+| `cycles` | integer, `"auto"` or `"max"` (not `3000.0`) |
+| `core` | `auto`, `normal`, `simple`, `dynamic` |
+| `sound` | tokens: at most one of `sb1 sb2 sbpro1 sbpro2 sb16 gb`; `gus`; `none` alone |
+| `extra` | flat `section.key` → string; section must be one of `sdl dosbox render cpu mixer midi sblaster gus speaker joystick serial dos ipx`; value must not contain newline, NUL, `[` or `]` |
+
+**preCommands whitelist**
+
+| Command | Allowed form |
+| --- | --- |
+| `cd` | `cd <dir inside Program/>` |
+| `loadfix` | `loadfix [-1] <exe inside Program/>` |
+| `set` | `set BLASTER=…` or `set SOUND=…`, value without drive or path |
+| `imgmount` | `imgmount <D\|D:> <file in Program/ or Resources/> [-t iso\|cdrom\|floppy]` |
+| `MOUNT` | refused — `Program/` is mounted automatically |
+
+Pipes, redirection (`| & > <`) and any other command are refused.
+
+## Generated `dosbox.conf`
+
+Written to `installed/<id>/Runtime/dosbox.conf` at every launch and started as
+`<dosbox> -noconfig -conf <that file>` with the working directory set to `Program/`. It is a build artifact:
+never ship it, never edit it.
+
+Output order is fixed, so the same input always produces the same bytes: header comment, then sections
+`sdl → dosbox → render → cpu → mixer → midi → sblaster → gus → others alphabetically → autoexec`, keys
+alphabetical inside a section, empty sections omitted.
+
+Mapping: `machine`/`memsize` → `[dosbox]`, `cycles`/`core` → `[cpu]`, `sound` → `[sblaster] sbtype=` /
+`[gus] gus=true` / `[mixer] nosound=true`, `extra` verbatim. `[autoexec]` gets `MOUNT C <abs path>`,
+`IMGMOUNT` lines, `cd` lines and the quoted executable with its arguments. Only overrides are written;
+everything else comes from the user's own DOSBox defaults.
 
 ## Library layout
 
 ```text
 <library>/
-├── carts/
-│   └── <cart-id>/
-│       ├── <program files copied from the cart>
-│       └── .retrium/
-│           ├── metadata.json
-│           ├── cover.png
-│           └── dosbox.conf
-├── states/
-│   └── <cart-id>/        # files written during play, restored before launch
-└── summaries/
-    └── <cart-id>.json    # last_run, runs, elapsed
+├── carts/<uuid>.cart              # immutable archive: export source, recovery source
+├── installed/<uuid>/
+│   ├── Program/**                 # C: — the working copy
+│   ├── Config/launch.json         # the one file worth editing by hand
+│   ├── Resources/cover.png
+│   └── Runtime/
+│       ├── dosbox.conf            # generated per launch
+│       ├── baseline.json          # stat snapshot taken at launch
+│       ├── running                # exists ⇒ the last run did not finish
+│       ├── State/**               # files the program wrote, relative to Program/
+│       ├── commit.json            # {revision, package_hash, manifest_version}
+│       ├── mapper.map
+│       └── captures/
+└── retrium.db                     # SQLite index: carts + summaries
 ```
 
-Discovery iterates directories under `<library>/carts`. Each subdirectory becomes a `Cart` whose `id`
-is the directory basename. For carts added through import that basename is the archive file's SHA-1;
-carts placed in the library by other means keep whatever directory name they were given. The `.retrium`
-folder holds all app-managed metadata; everything else is treated as cart data.
+`Runtime/` is regenerable except `State/`, which is the save layer. Saves are computed **at exit** by
+comparing `Program/` against the baseline, not by watching files: new or changed → copy into `State/`;
+gone from `Program/` → delete from `State/`; never in `Program/` → leave alone. The next launch overlays
+`State/` back before DOSBox starts.
 
-## `metadata.json`
+## Export: which copy wins
 
-Rust type: `CartInfo` (in `lib.rs`). JSON object with these fields:
+Export reads `installed/`, not the archive, so files the user dropped in are picked up. Save data is
+excluded by consulting `State/`:
 
-```json
-{
-    "name": "三國志4威力加強版",
-    "language": "Traditional Chinese",
-    "release": 1994,
-    "category": "Game",
-    "developer": "KOEI Corporation",
-    "publisher": "KOEI Corporation",
-    "series": null,
-    "tags": []
-}
-```
-
-| Field | Rust type | Required | Serialization behavior |
+| `installed/Program/` | `Runtime/State/` | archive | exported |
 | --- | --- | --- | --- |
-| `name` | `String` | Yes in practice | Must parse as a string. Empty value is replaced with the folder name. |
-| `language` | `Option<String>` | No | Omitted from app-written JSON when null. |
-| `release` | `Option<i32>` | No | Integer year, not a string. |
-| `category` | `Option<String>` | No | Drives the library category filter; missing values show as "Uncategorized". |
-| `developer` | `Option<String>` | No | Free text. |
-| `publisher` | `Option<String>` | No | Free text. |
-| `series` | `Option<String>` | No | Free text. |
-| `tags` | `Option<Vec<String>>` | No | Array of strings; defaults to absent/empty. |
+| has | no | — | installed version |
+| has | yes | has | archive version |
+| has | yes | no | skipped (the program created it) |
+| no | — | has | archive version (never treated as a deletion) |
 
-Loading rules, in order:
+`Config/launch.json` and `Resources/cover.png` come from `installed/`; metadata and `cart.author` from the
+database; `cart.id` is kept; `cart.tool` and `cart.createdAt` are refreshed when the revision changes.
+"Local changes not yet exported" (`dirty`) is exactly "the export set would hash differently", recomputed on
+demand — no stored flag, so it cannot go stale and does not misfire because `Program/` holds save files.
 
-1. Read `.retrium/metadata.json`; if it parses into `CartInfo`, use it.
-2. Otherwise read `.retrium/info.json` (legacy builds only); if it parses, use it.
-3. Otherwise construct `CartInfo` with the folder name and all optional fields absent.
+## Import decisions
 
-Notes:
+| Existing cart | Incoming | Result |
+| --- | --- | --- |
+| none | any | import as new |
+| same id, same revision, same hash | identical | idempotent: reported as already imported |
+| same id, higher revision | newer | pending **upgrade** — applies the archive, then layers `State/` back |
+| same id, lower revision | older | pending **downgrade** — refused unless chosen |
+| same id, same revision, different hash | conflict | pending **conflict** — same `(id, revision)` must not mean two contents |
+| different id, same hash | duplicate | pending **duplicate** (defensive: the manifest is inside the hash) |
 
-- Unknown JSON fields are ignored by serde; malformed JSON discards the whole file rather than individual fields.
-- The app writes `metadata.json` only. Never write `info.json` in a new cart.
-- When the app saves metadata it uses pretty-printed JSON with 4-space indentation.
-- The `name` field is shown on cards and detail pages; `release`, `category`, and `tags` also affect sorting,
-  filtering, and search.
-
-## `cover.png`
-
-- Path is exactly `<cart-dir>/.retrium/cover.png` (lowercase, PNG bytes).
-- Any other filename or location is ignored; the UI then shows a gradient placeholder with an icon.
-- Rendered with `object-fit: cover` in cards, thumbnails, and the detail hero. Landscape art around 800x600
-  with centered subjects crops well. Keep file sizes modest since covers load together in the library grid.
-- Ask the user for cover art; if none is supplied, omit the file and let the UI show its placeholder. Do
-  not synthesize or download a cover.
-
-## `dosbox.conf`
-
-Full DOSBox-style INI file at `<cart-dir>/.retrium/dosbox.conf`. On launch, Retrium:
-
-1. Restores `<library>/states/<cart-id>/` over the cart directory (if that folder exists).
-2. Starts the configured DOSBox executable with the cart directory as the working directory.
-3. Passes `-conf <absolute path to .retrium/dosbox.conf>` only when the file exists.
-
-The `[autoexec]` section is where the cart is mounted and launched. See `dosbox-tuning.md`.
-
-## Import and archive rules
-
-`add_carts` accepts `.cart` through the primary picker filter, with `.zip`, `.tar.gz`, and `.tgz` kept as
-a legacy filter. `import_archive` extracts every selection with `zip::ZipArchive`, so a cart must use real
-ZIP compression regardless of its extension.
-
-The archive file's SHA-1 (lowercase hex, 40 chars) is the cart id. `import_archive` extracts the archive
-contents verbatim into `<library>/carts/<sha1>/`; top-level folder and file names inside the archive do
-not affect the id. If `<library>/carts/<sha1>/` already exists the import is refused with an "already in
-the library" error and nothing is overwritten, so the same archive cannot be imported twice. The SHA-1 is
-also the key for `<library>/states/<sha1>/` and `<library>/summaries/<sha1>.json`.
-
-`archive_cart` always writes a zip-format cart named `<id>.cart` containing the cart directory's contents
-at the archive root, including `.retrium/`. The default filename is the cart id, which for an imported cart
-is its SHA-1; renaming the file afterwards does not change the cart id. Saved states and summaries are not
-part of the cart.
-
-## State mirroring
-
-While DOSBox runs, a watcher copies every created or modified file under the cart directory into
-`<library>/states/<id>/`, preserving relative paths. Any path containing a `.retrium` component is skipped.
-On the next launch, the whole states folder is copied back over the cart directory before DOSBox starts.
-Consequences for cart authors:
-
-- Ship only original, clean program files; do not ship save data you do not want restored on every launch.
-- Do not expect `metadata.json`, `cover.png`, or `dosbox.conf` to be captured as changed state.
-- Games that save outside the cart directory cannot be tracked by this mechanism.
-
-## Minimal valid cart
-
-```text
-DOOM/                       # staging folder name; ignored on import
-├── DOOM.EXE
-└── .retrium/
-    └── metadata.json   {"name": "Doom", "release": 1993}
-```
-
-Zip the **contents** of `DOOM/` (not the folder itself) into `*.cart`, so the archive root holds `DOOM.EXE`
-and `.retrium/`. With no `dosbox.conf`, DOSBox starts without `-conf` in the cart directory, so the user
-must mount and run the game manually. Include a config for an out-of-the-box experience.
+Nothing pending is ever applied automatically. The database is a disposable index: if `PRAGMA user_version`
+does not match, the tables are dropped and rebuilt from `carts/*.cart`. Nothing is migrated, ever — the
+format is not stable until app version 1.0.0.

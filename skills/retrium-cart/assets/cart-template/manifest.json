@@ -1,0 +1,32 @@
+{
+    "version": 1,
+    "cart": {
+        "id": "0192f0a1-7c00-7000-8000-000000000000",
+        "revision": 1,
+        "tool": {
+            "app": "retrium",
+            "version": "0.2.1",
+            "host": "windows-x86_64"
+        },
+        "createdAt": "2026-01-01T00:00:00+00:00"
+    },
+    "program": {
+        "name": "Replace with the program name",
+        "language": "en",
+        "release": 1993,
+        "category": "game",
+        "developer": "Replace or delete",
+        "publisher": "Replace or delete",
+        "series": "Replace or delete",
+        "tags": ["DOS"],
+        "players": 1,
+        "platform": "DOS",
+        "dos": {
+            "version": "MS-DOS 5.0",
+            "input": ["Keyboard"]
+        },
+        "externalIds": {
+            "mobygames": "1234"
+        }
+    }
+}

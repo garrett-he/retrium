@@ -464,6 +464,7 @@ hash = tree_hash({ 除 hash 外的全部 entry })
 │           ├── baseline.json   # 启动时对 Program/ 的 stat 快照，退出比对用
 │           ├── running         # 运行标记；存在即说明上次未正常收尾
 │           ├── State/**        # 相对 cart 的差异层（改动/新增），不是全量镜像
+│           ├── commit.json     # {revision, package_hash, manifest_version}：dirty 判定的缓存
 │           ├── mapper.map
 │           └── captures/
 └── retrium.db                  # SQLite：carts + summaries
@@ -477,6 +478,7 @@ hash = tree_hash({ 除 hash 外的全部 entry })
 - `Runtime/`：非隐藏，包含生成物与可变状态；重新解压 `Program/` 时必须保留 `Runtime/`。
 - `State/`：**相对 cart 的差异层**，只存被程序改过或新建的文件，不存与 cart 相同的文件。启动时覆盖进 `Program/`，退出时按基线比对增删。将来单独导出/导入存档直接指向它。
 - `baseline.json` / `running`：让"上次运行改了什么、删了什么"可复原；两者都可丢弃，删掉最多丢一次退出比对（见 §5.2 的崩溃处理）。
+- `commit.json`：`{revision, package_hash, manifest_version}`，导出成功后写入。它是 `dirty` 判定的**缓存**而不是事实来源——`retrium.db` 重建后没有这一行时退回"重新算一遍整包 hash"，所以删掉它只损失一次顺序读，不损失正确性（§5.3 的 dirty 判定，§4 的"删库重建"）。
 - `Runtime/dosbox.conf` + `mapper.map` + `captures/`：全部是生成物/本地数据，不随 cart 导出，可安全删除并重建。文件名不写 DOSBox 版本号，因为版本由用户在设置里指定、随时可能换（§1.4.1）。
 - DOSBox 可执行文件**不在 library 里**：它属于用户环境，存在 `config.json` 的 `dosbox.path`（单一路径，不支持多版本）。库里不复制二进制，也不为 cart 固定版本——conf 头注释记下这次探测到的版本，够排查就行（§1.4.1 第 3 条）。
 - 封面只存一份，在 `installed/<id>/Resources/cover.png`，不另设 `covers/`。
@@ -653,6 +655,47 @@ PRAGMA user_version = 1;
 | `skills/retrium-cart/assets/cart-template/` | 改为 ZIP 根布局模板（`hash` + `manifest.json` + `Config/launch.json`，不含 dosbox.conf） |
 | `AGENTS.md` / `README.md` | 数据模型与命令说明 |
 | 相关 `*.test.tsx` / Rust 测试 | 更新期望值 |
+
+### 6.1 落地情况
+
+上表是动工时的改动清单。落地后实际模块划分与命令清单如下（多出的部分是拆分带来的，格式与语义未变）。
+
+模块：
+
+| 文件 | 职责 |
+| --- | --- |
+| `hash.rs` | `tree_hash`、`digest_archive`、`digest_dir`、`parse_hash_file` |
+| `manifest.rs` | `Manifest` / `CartBlock` / `ProgramBlock` / `Tool` / `Author` |
+| `launch.rs` | `Launch` / `Target` / `Profile` / `Cycles` / `FileIndex` / `normalize_rel` / `render_conf` |
+| `error.rs` | `FieldError { path, message }`，渲染成 `targets[1].executable: file not found` |
+| `library.rs` | `Layout`、`inspect`、`extract`、`reset`、`repair`、`remove`、`collect_export_entries`、`commit`、`export_hash`、`commit.json` 读写 |
+| `import.rs` | `analyze`（只读）+ `import_new` / `replace`（落盘） |
+| `run.rs` | `prepare`（恢复 / 崩溃补比对 / 校验 / 生成 conf / 写基线）、`begin`、`finish` |
+| `state.rs` | 基线 `snapshot` / `apply` / `diff` / `clear` |
+| `db.rs` | SQLite schema、CRUD、`find_by_hash`、`user_version` 不匹配即删表重建 |
+| `config.rs` | `{ library, dosbox: { path } }`，无任何旧结构分支 |
+| `commands.rs` | 只做编排：取配置、开库、调上面这些模块、发事件 |
+
+命令（Tauri invoke）：
+
+| 命令 | 来源 |
+| --- | --- |
+| `discover_carts` | §5.1 第 10 步的读取端 |
+| `add_carts` + `resolve_import` | §5.1 拆成两阶段：分析阶段不落盘，需人决定的留 `pending` |
+| `get_cart_launch` | §5.6 的 UI 契约（targets + `default` + 错误原因） |
+| `run_cart(id, targetId?)` / `stop_cart` / `stop_all_carts` / `list_cart_processes` / `get_cart_process` | §5.2 |
+| `delete_cart` / `reset_cart` / `repair_cart` | §5.4，各自一条命令，因为语义不同 |
+| `update_cart_info` | §5.5 |
+| `open_cart_folder` | 打开 `installed/<id>/` |
+| `preview_export` / `commit_cart` / `export_cart_file` | §5.3 拆成"预览 dirty → 写归档 → 另存一份" |
+| `get_dosbox_path` / `set_dosbox_path` / `probe_dosbox_path` | §1.4.1 单路径 + 版本探测 |
+| `get_setup_state` / `complete_setup` / `set_library_directory` / `pick_library_directory` / `pick_dosbox_executable` | 首次启动与设置页 |
+
+三条偏差（相对本节的原始清单，不改变格式与语义）：
+
+1. `Runtime/commit.json` 已补进 §3 的目录清单（见该节"命名说明"）。
+2. `reset_cart` / `repair_cart` / `preview_export` / `commit_cart` / `get_cart_launch` 是把 §5.4、§5.6 的流程落成 API 时的必要拆分。
+3. `add_carts` 拆成 `add_carts` + `resolve_import`：分析阶段只读，`Outcome::Pending` 交给人决定（§2.3 的冲突表要求"不自行解决"）。
 
 ## 7. 测试要点
 

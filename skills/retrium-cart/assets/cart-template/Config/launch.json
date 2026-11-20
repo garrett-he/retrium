@@ -1,0 +1,27 @@
+{
+    "version": 1,
+    "default": "play",
+    "targets": [
+        {
+            "id": "play",
+            "label": "Main game",
+            "executable": "GAME.EXE",
+            "workingDir": "."
+        },
+        {
+            "id": "setup",
+            "label": "Sound setup",
+            "executable": "SETUP.EXE",
+            "profile": "safe"
+        }
+    ],
+    "profiles": {
+        "safe": {
+            "machine": "svga_s3",
+            "memsize": 16,
+            "cycles": "max",
+            "core": "auto",
+            "sound": ["sb16"]
+        }
+    }
+}

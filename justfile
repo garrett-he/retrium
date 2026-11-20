@@ -22,6 +22,10 @@ format:
 # Run tests
 test:
     pnpm run test:coverage
+    cargo test --manifest-path src-tauri/Cargo.toml
+
+# Run the Rust coverage gate (Linux only, needs cargo-tarpaulin)
+coverage:
     cargo tarpaulin --manifest-path src-tauri/Cargo.toml --exclude-files src/main.rs --skip-clean --out Stdout --fail-under 80 --timeout 300
 
 # Run Tauri
