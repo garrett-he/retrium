@@ -121,6 +121,16 @@ export function useCarts() {
         return report;
     }, [refresh]);
 
+    /** Import carts from paths handed over by the OS shell (double-clicked `.cart` files). */
+    const importCarts = useCallback(
+        async (paths: string[]) => {
+            const report = await api.importCarts(paths);
+            await refresh();
+            return report;
+        },
+        [refresh],
+    );
+
     const resolveImport = useCallback(
         async (archive: string, action: ImportAction) => {
             const cart = await api.resolveImport(archive, action);
@@ -202,6 +212,7 @@ export function useCarts() {
         stopCart,
         stopAllCarts,
         addCarts,
+        importCarts,
         resolveImport,
         saveCartInfo,
         deleteCart,

@@ -335,37 +335,19 @@ fn pending_message(decision: crate::ImportDecision, analyzed: &crate::import::An
     }
 }
 
-/// Pick carts and import whatever needs no decision. Anything ambiguous comes
-/// back in `pending` and is applied later by `resolve_import`.
-#[tauri::command]
-pub async fn add_carts(app: AppHandle, state: State<'_, AppState>) -> Result<crate::ImportReport, String> {
-    let files = app
-        .dialog()
-        .file()
-        .add_filter("Retrium Carts", &["cart"])
-        .blocking_pick_files();
-
-    let files = match files {
-        Some(files) => files,
-        None => {
-            return Ok(crate::ImportReport {
-                imported: Vec::new(),
-                skipped: Vec::new(),
-                pending: Vec::new(),
-            })
-        }
-    };
-
-    let session = session(&state)?;
+/// The import loop behind both entry points (`add_carts` for the file dialog,
+/// `import_carts` for paths handed over by the OS shell).
+fn import_files(files: Vec<PathBuf>, state: &State<'_, AppState>) -> Result<crate::ImportReport, String> {
+    let session = session(state)?;
     let mut report = crate::ImportReport {
         imported: Vec::new(),
         skipped: Vec::new(),
         pending: Vec::new(),
     };
 
-    with_db(&state, |db| {
+    with_db(state, |db| {
         for file in files {
-            let path = file.into_path().map_err(|e| e.to_string())?;
+            let path = file;
             let archive = path.to_string_lossy().to_string();
 
             let analyzed = match crate::import::analyze(db, &path) {
@@ -412,6 +394,71 @@ pub async fn add_carts(app: AppHandle, state: State<'_, AppState>) -> Result<cra
     })?;
 
     Ok(report)
+}
+
+/// Pick carts and import whatever needs no decision. Anything ambiguous comes
+/// back in `pending` and is applied later by `resolve_import`.
+#[tauri::command]
+pub async fn add_carts(app: AppHandle, state: State<'_, AppState>) -> Result<crate::ImportReport, String> {
+    let files = app
+        .dialog()
+        .file()
+        .add_filter("Retrium Carts", &["cart"])
+        .blocking_pick_files();
+
+    let files = match files {
+        Some(files) => files,
+        None => {
+            return Ok(crate::ImportReport {
+                imported: Vec::new(),
+                skipped: Vec::new(),
+                pending: Vec::new(),
+            })
+        }
+    };
+
+    let files = files
+        .into_iter()
+        .map(|file| file.into_path().map_err(|e| e.to_string()))
+        .collect::<Result<Vec<_>, _>>()?;
+    import_files(files, &state)
+}
+
+/// Import the carts handed over by the OS shell (double-clicked `.cart` files,
+/// queued through `pending_imports`). Missing files are reported, not fatal.
+#[tauri::command]
+pub fn import_carts(paths: Vec<String>, state: State<'_, AppState>) -> Result<crate::ImportReport, String> {
+    let mut files = Vec::new();
+    let mut missing = Vec::new();
+    for path in paths {
+        if PathBuf::from(&path).is_file() {
+            files.push(PathBuf::from(path));
+        } else {
+            missing.push(path);
+        }
+    }
+
+    let mut report = import_files(files, &state)?;
+    report
+        .skipped
+        .extend(missing.into_iter().map(|archive| crate::ImportNote {
+            archive,
+            id: String::new(),
+            reason: "file not found".to_string(),
+        }));
+    Ok(report)
+}
+
+/// Drain the list of cart paths queued for import. Paths arrive out-of-band
+/// (startup arguments or a second instance), so the UI pulls them instead of
+/// relying on events that fire before its listeners exist.
+#[tauri::command]
+pub fn take_pending_imports(state: State<'_, AppState>) -> Vec<String> {
+    state
+        .pending_imports
+        .lock()
+        .map(|mut pending| std::mem::take(&mut *pending))
+        .unwrap_or_default()
 }
 
 /// Apply or skip one item that `add_carts` left pending.

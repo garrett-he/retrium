@@ -1,3 +1,4 @@
+pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod db;
@@ -11,11 +12,12 @@ pub mod run;
 pub mod state;
 
 use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use crate::db::Db;
 use crate::manifest::{Dos, ProgramBlock, Tool};
@@ -272,6 +274,22 @@ pub struct AppState {
     pub processes: Mutex<HashMap<String, ProcessHandle>>,
     /// Opened lazily and dropped when the library changes.
     pub db: Mutex<Option<Db>>,
+    /// Cart paths queued for import from outside the UI: startup arguments and
+    /// second instances. Drained by the `take_pending_imports` command.
+    pub pending_imports: Mutex<Vec<String>>,
+}
+
+/// Queue cart paths for the UI to import and poke it to drain the queue.
+fn queue_pending_imports(app: &tauri::AppHandle, paths: &[PathBuf]) {
+    if paths.is_empty() {
+        return;
+    }
+    if let Some(state) = app.try_state::<AppState>() {
+        if let Ok(mut pending) = state.pending_imports.lock() {
+            pending.extend(paths.iter().map(|path| path.to_string_lossy().to_string()));
+        }
+    }
+    let _ = app.emit("pending-imports", ());
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -279,12 +297,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let paths = cli::cart_paths(args);
+            queue_pending_imports(app, &paths);
+            // Bringing the existing window forward is part of the "open with"
+            // gesture, even when the arguments carried no cart.
             if let Some(window) = app.get_webview_window("main") {
-                if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/window-icon.png")) {
-                    let _ = window.set_icon(icon);
-                }
+                let _ = window.set_focus();
             }
+        }))
+        .setup(|app| {
+            let startup_carts = cli::cart_paths(std::env::args());
             let (config, configured) = match config::Config::load() {
                 Some(config) => (config, true),
                 None => (config::Config::default(), false),
@@ -294,12 +317,25 @@ pub fn run() {
                 configured: AtomicBool::new(configured),
                 processes: Mutex::new(HashMap::new()),
                 db: Mutex::new(None),
+                pending_imports: Mutex::new(
+                    startup_carts
+                        .iter()
+                        .map(|path| path.to_string_lossy().to_string())
+                        .collect(),
+                ),
             });
+            if let Some(window) = app.get_webview_window("main") {
+                if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/window-icon.png")) {
+                    let _ = window.set_icon(icon);
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::discover_carts,
             commands::add_carts,
+            commands::import_carts,
+            commands::take_pending_imports,
             commands::resolve_import,
             commands::get_cart_launch,
             commands::run_cart,

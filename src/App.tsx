@@ -2,6 +2,7 @@ import CssBaseline from "@mui/material/CssBaseline";
 import ThemeProvider from "@mui/material/styles/ThemeProvider";
 import { useMemo } from "react";
 import { createHashRouter, Navigate, RouterProvider } from "react-router-dom";
+import { ImportRequests } from "@/components/ImportRequests";
 import { Layout, LoadingScreen, useThemeMode } from "@/components/Layout";
 import { CartsProvider, useCartsContext } from "@/hooks/useCarts";
 import { SnackbarProvider } from "@/hooks/useSnackbar";
@@ -38,7 +39,12 @@ function AppContent({
         );
     }
 
-    return <RouterProvider router={createAppRouter(mode, onModeChange)} />;
+    return (
+        <>
+            <RouterProvider router={createAppRouter(mode, onModeChange)} />
+            <ImportRequests />
+        </>
+    );
 }
 
 function createAppRouter(mode: "dark" | "light", onModeChange: (mode: "dark" | "light") => void) {

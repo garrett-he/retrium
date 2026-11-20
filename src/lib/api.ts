@@ -15,6 +15,8 @@ import type {
 export const api = {
     discoverCarts: () => invoke<Cart[]>("discover_carts"),
     addCarts: () => invoke<ImportReport>("add_carts"),
+    importCarts: (paths: string[]) => invoke<ImportReport>("import_carts", { paths }),
+    takePendingImports: () => invoke<string[]>("take_pending_imports"),
     resolveImport: (archive: string, action: ImportAction) => invoke<Cart>("resolve_import", { archive, action }),
 
     getCartLaunch: (id: string) => invoke<LaunchInfo>("get_cart_launch", { id }),

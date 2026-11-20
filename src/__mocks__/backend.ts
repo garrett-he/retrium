@@ -14,6 +14,8 @@ export interface BackendOptions {
     launch?: LaunchInfo;
     preview?: ExportPreview;
     importReport?: ImportReport;
+    /** Paths `take_pending_imports` should hand back (shell imports). */
+    pendingImports?: string[];
     setup?: SetupState;
     probe?: DosboxProbe;
     exportPath?: string | null;
@@ -124,6 +126,8 @@ export function makeBackend(options: BackendOptions = {}) {
         },
         export_cart_file: () => (options.exportPath === undefined ? "/tmp/Doom.cart" : options.exportPath),
         add_carts: () => options.importReport ?? { imported: [], skipped: [], pending: [] },
+        import_carts: () => options.importReport ?? { imported: [], skipped: [], pending: [] },
+        take_pending_imports: () => options.pendingImports ?? [],
         resolve_import: () => doom,
         probe_dosbox_path: () => probe,
         set_dosbox_path: (args) => ({ ...probe, path: args.path }),
