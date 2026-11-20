@@ -7,7 +7,7 @@
 ## 0. 总体决策（讨论结论）
 
 1. **完全放弃向后兼容**：根级 `version = 1`；不再读取 `.retrium/metadata.json`、`info.json`，也不再从文件夹名兜底。旧 cart 直接拒绝导入（`Not a Retrium cart` / `Unsupported cart version: N`）。旧 library（`carts/<sha1>/`）同样不迁移、不识别、不提供转换工具——连"备份后清空"的提示都不做，library 根下不符合新布局的东西一律视为无关文件。**这条规则适用于所有持久化数据，不只是 cart 和 library**：`config.json` 也不做旧结构迁移（结构对不上就用默认值重建），SQLite schema 变了就删库重建（§4）。任何地方都不要为兼容写分支代码——迁移代码是只在启动时跑一次、之后永远没人验证的代码，成本却是永久的。
-2. **1.0.0 已发布，"免兼容"窗口关闭**：下面这些从 1.0.0 起算**对外契约**，改动必须先升版本、并给出用户侧的处置办法（迁移，或明确告知旧数据不可用）——`manifest.json` 的 `version: 1` cart 格式（真要改就是 `version: 2`，且不能再"旧包一律拒绝"，得能读 v1）、library 布局（`carts/<id>.cart`、`installed/<id>/`）、`config.json` 的 `{ library, dosbox: { path } }` 形状。**仍然是内部实现、照旧可以直接改**：SQLite schema（可丢弃索引，删库重建）、Tauri 命令名与参数、前端路由与本地 UI 状态——用户在磁盘上看不到它们，也就不欠兼容。**别把两个 `version` 搞混**：manifest 里的 `version: 1` 是 cart 的格式版本（它变了意味着一份 cart 读不了）；1.0.0 是应用版本。
+2. **1.0.0 已发布，"免兼容"窗口关闭**：下面这些从 1.0.0 起算**对外契约**，改动必须先升版本、并给出用户侧的处置办法（迁移，或明确告知旧数据不可用）——`manifest.json` 的 `version: 1` cart 格式（真要改就是 `version: 2`，且不能再"旧包一律拒绝"，得能读 v1）、library 布局（`carts/<id>.cart`、`installed/<id>/`）、`config.json` 的 `{ library, dosbox: { path } }` 形状（可选键 `dosbox.scale` 是 1.0.0 之后的**加法扩展**：旧配置缺键按 1 处理、旧应用忽略新键，双向兼容）。**仍然是内部实现、照旧可以直接改**：SQLite schema（可丢弃索引，删库重建）、Tauri 命令名与参数、前端路由与本地 UI 状态——用户在磁盘上看不到它们，也就不欠兼容。**别把两个 `version` 搞混**：manifest 里的 `version: 1` 是 cart 的格式版本（它变了意味着一份 cart 读不了）；1.0.0 是应用版本。
 3. **cart 是 ZIP**，内容直接放在 ZIP 根，借鉴 macOS `.app` 的"固定顶层布局 + 单一清单"，但不照搬 Framework/签名那套。不设 `Contents/` 包裹层——ZIP 本身已经是边界。
 4. **身份是声明，内容哈希是事实**：`cart.id` 是首次创建时生成、此后永不改变的 UUID；`cart.revision` 是由作者决定的整数版本；两者的真实性由作者背书。整包完整性由根级 `hash` 文件承担，只描述字节。**不做内容寻址**——内容变了 id 不变，这是刻意选择（见 §2.1.1）。
 5. **不做"同一程序的另一套配置"这类分组**：配置本来就是升级的一部分，改配置 = 同一 cart 的下一个 revision；真要两份并存就是两个 cart。
@@ -196,10 +196,11 @@ hash = tree_hash({ 除 hash 外的全部 entry })   # 包含 manifest.json
 **生成规则**（`run_cart` 每次启动执行）：
 
 1. 只写**差异**：先写必写的基础覆盖（`mapperfile`/`captures` 指向 `Runtime/`，见 §1.4），再叠加选中 target 的 profile（一等字段 + `extra`），按下方《字段级校验与取值》的落位表合并、按固定段序输出。没有"基线覆盖集"这一层，没写到的键全部留给 DOSBox 自己的默认值；
-2. 追加 `[autoexec]`：`MOUNT C "<installed>/Program"` → `C:` → `workingDir` 的 `cd`（为 `.` 时省略）→ `preCommands` → `executable` + `arguments`（含空格的参数整体加双引号）；
-3. 写到 `installed/<id>/Runtime/dosbox.conf`（覆盖上一次生成的文件）；
-4. 启动命令固定为 `<dosbox-exe> -noconfig -conf <Runtime/dosbox.conf>`（可执行文件取设置里 `config.json` 的 `dosbox.path`，见 §1.4.1）：`-noconfig` 不加载任何默认配置文件，`-conf` 叠加这份，其余一切取 DOSBox 编译期内置默认值。
-5. 生成文件头注释里记账：Retrium 版本、生成时间、选中的 DOSBox 版本（best-effort 探测结果，可能是 `unknown`）、target 与 profile——排查"为什么这个键没生效"时先看这里。
+2. **全局窗口倍数**（`config.json` 的可选键 `dosbox.scale`，1..5）：为 2..5 时写 `[sdl] output=openglnb` + `windowresolution=<320·N>x<240·N>`（baseline 320x240）。**不能只用 `render.scaler`**：0.74 只在硬件倍线模式（mode 13h）下应用 scaler，普通 SVGA/文本模式静默回退 1x；而 `windowresolution` 只有支持硬件缩放的 output 才生效（`surface` 忽略它），故必须配 `openglnb`——DOSBox 会按游戏图像自身比例在窗口内信箱式居中（`GFX_SetupSurfaceScaled` 的 `sdl.clip` 逻辑），不拉伸变形，`openglnb`（nearest）保持像素锐利。320x200 游戏在 4:3 窗口里恰好得到整数倍画面（640x400…1600x1000）。这是**固定窗口尺寸**语义——所有 cart 窗口一样大，不是"游戏分辨率的 N 倍"。cart 的 `extra` 里显式写了 `sdl.output` / `sdl.windowresolution` 时逐键以 cart 为准；scale 为 1 或缺省时不写任何键；
+3. 追加 `[autoexec]`：`MOUNT C "<installed>/Program"` → `C:` → `workingDir` 的 `cd`（为 `.` 时省略）→ `preCommands` → `executable` + `arguments`（含空格的参数整体加双引号）；
+4. 写到 `installed/<id>/Runtime/dosbox.conf`（覆盖上一次生成的文件）；
+5. 启动命令固定为 `<dosbox-exe> -noconfig -conf <Runtime/dosbox.conf>`（可执行文件取设置里 `config.json` 的 `dosbox.path`，见 §1.4.1）：`-noconfig` 不加载任何默认配置文件，`-conf` 叠加这份，其余一切取 DOSBox 编译期内置默认值。
+6. 生成文件头注释里记账：Retrium 版本、生成时间、选中的 DOSBox 版本（best-effort 探测结果，可能是 `unknown`）、target 与 profile——排查"为什么这个键没生效"时先看这里。
 
 **`preCommands` 白名单**（导入时校验一次，生成 conf 时再校验一次——本地编辑过的文件也要过这一关）：
 
@@ -480,7 +481,7 @@ hash = tree_hash({ 除 hash 外的全部 entry })
 - `baseline.json` / `running`：让"上次运行改了什么、删了什么"可复原；两者都可丢弃，删掉最多丢一次退出比对（见 §5.2 的崩溃处理）。
 - `commit.json`：`{revision, package_hash, manifest_version}`，导出成功后写入。它是 `dirty` 判定的**缓存**而不是事实来源——`retrium.db` 重建后没有这一行时退回"重新算一遍整包 hash"，所以删掉它只损失一次顺序读，不损失正确性（§5.3 的 dirty 判定，§4 的"删库重建"）。
 - `Runtime/dosbox.conf` + `mapper.map` + `captures/`：全部是生成物/本地数据，不随 cart 导出，可安全删除并重建。文件名不写 DOSBox 版本号，因为版本由用户在设置里指定、随时可能换（§1.4.1）。
-- DOSBox 可执行文件**不在 library 里**：它属于用户环境，存在 `config.json` 的 `dosbox.path`（单一路径，不支持多版本）。库里不复制二进制，也不为 cart 固定版本——conf 头注释记下这次探测到的版本，够排查就行（§1.4.1 第 3 条）。
+- DOSBox 可执行文件**不在 library 里**：它属于用户环境，存在 `config.json` 的 `dosbox.path`（单一路径，不支持多版本）。库里不复制二进制，也不为 cart 固定版本——conf 头注释记下这次探测到的版本，够排查就行（§1.4.1 第 3 条）。同一节下的可选键 `dosbox.scale`（1/2/3）是全局窗口放大倍数，实现见 §1.4.1 生成规则第 2 条；`1` 在 config.json 里不落盘（`None`）。
 - 封面只存一份，在 `installed/<id>/Resources/cover.png`，不另设 `covers/`。
 
 ## 4. SQLite

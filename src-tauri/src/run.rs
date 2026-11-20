@@ -31,6 +31,7 @@ pub fn prepare(
     target: Option<&str>,
     dosbox: &Path,
     app_version: &str,
+    scale: Option<u8>,
 ) -> Result<Prepared, String> {
     let installed = layout.install_dir(id);
     if !installed.is_dir() {
@@ -76,6 +77,7 @@ pub fn prepare(
                 target_id: target,
                 dosbox_version: version.as_deref(),
                 app_version,
+                scale,
             },
         )
         .map_err(|e| e.to_string())?;
@@ -205,7 +207,7 @@ mod tests {
     #[test]
     fn generates_the_conf_and_keeps_the_default_target() {
         let (root, layout) = installed_cart("prepare");
-        let prepared = prepare(&layout, ID, None, Path::new("/nonexistent/dosbox"), "0.3.0").unwrap();
+        let prepared = prepare(&layout, ID, None, Path::new("/nonexistent/dosbox"), "0.3.0", None).unwrap();
 
         assert_eq!(prepared.target_id, "game");
         assert_eq!(prepared.target_label, "主游戏");
@@ -223,7 +225,15 @@ mod tests {
     #[test]
     fn a_named_target_gets_its_own_conf() {
         let (root, layout) = installed_cart("prepare-target");
-        let prepared = prepare(&layout, ID, Some("setup"), Path::new("/nonexistent/dosbox"), "0.3.0").unwrap();
+        let prepared = prepare(
+            &layout,
+            ID,
+            Some("setup"),
+            Path::new("/nonexistent/dosbox"),
+            "0.3.0",
+            None,
+        )
+        .unwrap();
         assert_eq!(prepared.target_id, "setup");
         let conf = std::fs::read_to_string(&prepared.conf_path).unwrap();
         assert!(!conf.contains("\nmemsize=16"));
@@ -238,7 +248,7 @@ mod tests {
         std::fs::remove_dir_all(layout.program_dir(ID)).unwrap();
         write(layout.state_dir(ID).join("Program/SAVE.DAT"), "save");
 
-        let prepared = prepare(&layout, ID, None, Path::new("/nonexistent/dosbox"), "0.3.0").unwrap();
+        let prepared = prepare(&layout, ID, None, Path::new("/nonexistent/dosbox"), "0.3.0", None).unwrap();
         assert!(prepared.program_dir.join("GAME.EXE").is_file());
         assert!(
             prepared.program_dir.join("SAVE.DAT").is_file(),
@@ -257,7 +267,7 @@ mod tests {
         // The program wrote a save and the process died without cleanup.
         write(layout.program_dir(ID).join("CRASH.SAV"), "save");
 
-        prepare(&layout, ID, None, Path::new("/nonexistent/dosbox"), "0.3.0").unwrap();
+        prepare(&layout, ID, None, Path::new("/nonexistent/dosbox"), "0.3.0", None).unwrap();
         assert!(layout.state_dir(ID).join("Program/CRASH.SAV").is_file());
         assert!(!layout.runtime_dir(ID).join(RUNNING_FILE).exists());
 

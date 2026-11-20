@@ -353,6 +353,7 @@ pub fn run() {
             commands::export_cart_file,
             commands::get_dosbox_path,
             commands::set_dosbox_path,
+            commands::set_dosbox_scale,
             commands::probe_dosbox_path,
             commands::get_setup_state,
             commands::complete_setup,

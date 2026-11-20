@@ -59,7 +59,7 @@ function InfoRow({ label, value, mono = false, action }: InfoRowProps) {
 export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeChange: (mode: ThemeMode) => void }) {
     const { t, language, setLanguage } = useI18n();
     const { notify } = useSnackbar();
-    const { setupState, dosbox, changeLibraryDirectory, saveDosboxPath } = useCartsContext();
+    const { setupState, dosbox, changeLibraryDirectory, saveDosboxPath, saveDosboxScale } = useCartsContext();
 
     const [path, setPath] = useState(dosbox?.path ?? "");
     const [probe, setProbe] = useState<DosboxProbe | null>(null);
@@ -103,6 +103,12 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
             })
             .catch((error) => notify(String(error), "error"))
             .finally(() => setBusy(false));
+    };
+
+    const handleSaveScale = (scale: number) => {
+        saveDosboxScale(scale)
+            .then(() => notify(t("settings.dosbox.scaleSaved"), "success"))
+            .catch((error) => notify(String(error), "error"));
     };
 
     const handleChangeDirectory = () => {
@@ -181,6 +187,30 @@ export function SettingsPage({ mode, onModeChange }: { mode: ThemeMode; onModeCh
                             )}
                         </Box>
                     )}
+                    <Stack
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={1.5}
+                        alignItems={{ sm: "center" }}
+                        sx={{ mt: 2 }}
+                    >
+                        <TextField
+                            select
+                            size="small"
+                            label={t("settings.dosbox.scale")}
+                            value={dosbox?.scale ?? 1}
+                            onChange={(event) => handleSaveScale(Number(event.target.value))}
+                            sx={{ minWidth: 180 }}
+                        >
+                            <MenuItem value={1}>{t("settings.dosbox.scaleOriginal")}</MenuItem>
+                            <MenuItem value={2}>{t("settings.dosbox.scaleTwo")}</MenuItem>
+                            <MenuItem value={3}>{t("settings.dosbox.scaleThree")}</MenuItem>
+                            <MenuItem value={4}>{t("settings.dosbox.scaleFour")}</MenuItem>
+                            <MenuItem value={5}>{t("settings.dosbox.scaleFive")}</MenuItem>
+                        </TextField>
+                        <Typography variant="body2" color="text.secondary">
+                            {t("settings.dosbox.scaleHint")}
+                        </Typography>
+                    </Stack>
                 </Paper>
 
                 <Paper variant="outlined" sx={{ p: 2.5, mb: 2.5 }}>

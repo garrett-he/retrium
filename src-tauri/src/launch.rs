@@ -18,6 +18,7 @@ use serde::de::{self, Deserializer};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
+use crate::config;
 use crate::error::{self, FieldError};
 
 pub const LAUNCH_VERSION: u32 = 1;
@@ -463,6 +464,35 @@ impl Launch {
             }
         }
 
+        // Global window scale (Settings). Applied after the cart's `extra` so a
+        // cart that explicitly names `sdl.output` or `sdl.windowresolution`
+        // always wins, key by key.
+        //
+        // The window is a fixed baseline×N (320x240 by default), rendered
+        // through `output=openglnb`: DOSBox 0.74 only honors
+        // `windowresolution` when the output supports hardware scaling
+        // (`output=surface` ignores it), and with OpenGL it letterboxes the
+        // game image into that window at the image's own aspect ratio
+        // (`GFX_SetupSurfaceScaled`). `openglnb` keeps pixels crisp; the
+        // letterbox borders stay black. In practice this yields exact integer
+        // zooms for 320x200 games (640x400 … 1600x1000 inside 4:3 windows).
+        if let Some(scale) = config::valid_scale(options.scale) {
+            if !sections.get("sdl").is_some_and(|values| values.contains_key("output")) {
+                insert(&mut sections, "sdl", "output", "openglnb".to_string());
+            }
+            if !sections
+                .get("sdl")
+                .is_some_and(|values| values.contains_key("windowresolution"))
+            {
+                let window = format!(
+                    "{}x{}",
+                    config::SCALE_BASE_W * u32::from(scale),
+                    config::SCALE_BASE_H * u32::from(scale)
+                );
+                insert(&mut sections, "sdl", "windowresolution", window);
+            }
+        }
+
         let mut autoexec = Vec::new();
         autoexec.push(format!(
             "MOUNT C \"{}\"",
@@ -816,6 +846,11 @@ pub struct ConfOptions<'a> {
     /// Best-effort probe result, `None` renders as `unknown`.
     pub dosbox_version: Option<&'a str>,
     pub app_version: &'a str,
+    /// Global window scale from `config.json` (2..5 = `sdl.windowresolution`
+    /// baseline×N + `sdl.output=openglnb`, see the comment in `render_conf`).
+    /// A cart that names `sdl.output` or `sdl.windowresolution` in `extra`
+    /// overrides the corresponding key.
+    pub scale: Option<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -846,7 +881,7 @@ mod tests {
                     "cycles": 3000,
                     "core": "normal",
                     "sound": ["sb16"],
-                    "extra": { "render.scaler": "normal3x" }
+                    "extra": { "sdl.windowresolution": "1024x768" }
                 },
                 "minimal": { "machine": "hercules", "memsize": 4, "cycles": "max" }
             }
@@ -875,12 +910,80 @@ mod tests {
             target_id: Some("game"),
             dosbox_version: Some("0.74-3"),
             app_version: "0.3.0",
+            scale: None,
         }
     }
 
     #[test]
     fn accepts_the_documented_example() {
         parse(&sample()).unwrap();
+    }
+
+    #[test]
+    fn the_global_scale_enlarges_the_window() {
+        let launch = parse(&sample()).unwrap();
+        // `setup`'s profile carries no `sdl.*` extra of its own.
+        let expected = [
+            (2u8, "windowresolution=640x480"),
+            (3, "windowresolution=960x720"),
+            (4, "windowresolution=1280x960"),
+            (5, "windowresolution=1600x1200"),
+        ];
+        for (scale, resolution) in expected {
+            let opts = ConfOptions {
+                target_id: Some("setup"),
+                scale: Some(scale),
+                ..options()
+            };
+            let text = launch.render_conf(&files(), &opts).unwrap().text;
+            assert!(text.contains("output=openglnb\n"), "scale {scale}:\n{text:?}");
+            assert!(
+                text.contains(&format!("{resolution}\n")),
+                "scale {scale}: wanted {resolution:?}, got\n{text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn scale_1_and_out_of_range_scale_render_nothing() {
+        let launch = parse(&sample()).unwrap();
+        for scale in [1u8, 6, 255] {
+            let opts = ConfOptions {
+                target_id: Some("setup"),
+                scale: Some(scale),
+                ..options()
+            };
+            let text = launch.render_conf(&files(), &opts).unwrap().text;
+            assert!(
+                !text.contains("windowresolution=") && !text.contains("output=openglnb"),
+                "scale {scale} leaked into the conf"
+            );
+        }
+    }
+
+    #[test]
+    fn cart_sdl_keys_in_extra_override_the_global_scale() {
+        // The sample's `game` profile already carries
+        // `sdl.windowresolution: 1024x768` in `extra`.
+        let launch = parse(&sample()).unwrap();
+        let opts = ConfOptions {
+            scale: Some(4),
+            ..options()
+        };
+        let text = launch.render_conf(&files(), &opts).unwrap().text;
+        assert!(text.contains("windowresolution=1024x768"));
+        assert!(!text.contains("windowresolution=1280x960"));
+        // The cart did not name an output, so the global one still applies.
+        assert!(text.contains("output=openglnb"));
+
+        // A profile without its own windowresolution falls back to the global.
+        let opts = ConfOptions {
+            target_id: Some("setup"),
+            scale: Some(2),
+            ..options()
+        };
+        let text = launch.render_conf(&files(), &opts).unwrap().text;
+        assert!(text.contains("windowresolution=640x480"));
     }
 
     #[test]
@@ -1064,14 +1167,12 @@ mod tests {
 
 [sdl]
 mapperfile=C:\\Games\\Retrium\\installed\\019ae4c1\\Runtime\\mapper.map
+windowresolution=1024x768
 
 [dosbox]
 captures=C:\\Games\\Retrium\\installed\\019ae4c1\\Runtime\\captures
 machine=svga_s3
 memsize=16
-
-[render]
-scaler=normal3x
 
 [cpu]
 core=normal

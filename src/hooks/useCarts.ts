@@ -92,6 +92,11 @@ export function useCarts() {
         return probe;
     }, []);
 
+    const saveDosboxScale = useCallback(async (scale: number) => {
+        await api.setDosboxScale(scale);
+        setDosbox((current) => (current ? { ...current, scale } : current));
+    }, []);
+
     const runCart = useCallback(
         async (id: string, targetId?: string) => {
             const process = await api.runCart(id, targetId);
@@ -208,6 +213,7 @@ export function useCarts() {
         completeSetup,
         changeLibraryDirectory,
         saveDosboxPath,
+        saveDosboxScale,
         runCart,
         stopCart,
         stopAllCarts,

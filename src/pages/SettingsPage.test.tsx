@@ -16,7 +16,7 @@ const { invoke, openUrl } = vi.hoisted(() => ({
 vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: vi.fn((p: string) => p), invoke }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl }));
 
-const probe = { path: "C:\\DOSBox\\dosbox.exe", exists: true, version: "DOSBox 0.74-3" };
+const probe = { path: "C:\\DOSBox\\dosbox.exe", exists: true, version: "DOSBox 0.74-3", scale: 1 };
 
 function renderPage(mode: "dark" | "light" = "dark", onModeChange = vi.fn()) {
     return render(
@@ -149,6 +149,18 @@ describe("SettingsPage", () => {
 
         await user.click(screen.getByRole("button", { name: "Test" }));
         expect(await screen.findByText("No executable at C:\\nope.exe")).toBeTruthy();
+    });
+
+    it("saves a new window scale immediately", async () => {
+        const user = userEvent.setup();
+        renderPage();
+        await screen.findByText("Storage");
+
+        await user.click(screen.getByLabelText("Window scale"));
+        await user.click(await screen.findByRole("option", { name: "5x (1600x1200)" }));
+
+        expect(invoke).toHaveBeenCalledWith("set_dosbox_scale", { scale: 5 });
+        expect(await screen.findByText("Window scale saved")).toBeTruthy();
     });
 
     it("switches the appearance mode", async () => {

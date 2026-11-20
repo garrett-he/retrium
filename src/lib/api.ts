@@ -39,6 +39,7 @@ export const api = {
 
     getDosboxPath: () => invoke<DosboxProbe>("get_dosbox_path"),
     setDosboxPath: (path: string) => invoke<DosboxProbe>("set_dosbox_path", { path }),
+    setDosboxScale: (scale: number) => invoke<void>("set_dosbox_scale", { scale }),
     probeDosboxPath: (path: string) => invoke<DosboxProbe>("probe_dosbox_path", { path }),
 
     getSetupState: () => invoke<SetupState>("get_setup_state"),

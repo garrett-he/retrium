@@ -4,6 +4,9 @@
 //! `dosbox.conf` — `-noconfig` guarantees the isolation. A `config.json` that
 //! does not match this shape is treated as absent and rebuilt from defaults;
 //! there is no migration path on purpose (design document §0.1).
+//!
+//! `dosbox.scale` is an optional additive key (1 = original, 2 = 2x, 3 = 3x
+//! window scale). Older builds ignore it; a missing key means 1.
 
 use std::fs;
 use std::io::Read;
@@ -13,9 +16,29 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
+/// Window-scale values accepted in `config.json` and on the command.
+///
+/// Semantics: the DOS window is a fixed `BASE_W×N × BASE_H×N` window
+/// (baseline 320x240), rendered through `output=openglnb`. This is a window
+/// size, not a per-game multiplier — every cart opens in the same window.
+pub const SCALE_MIN: u8 = 1;
+pub const SCALE_MAX: u8 = 5;
+/// Baseline the scale multiplies into a window size. 320x240 is 4:3; the
+/// common 320x200 games fit it with letterbox borders at exact integer zooms.
+pub const SCALE_BASE_W: u32 = 320;
+pub const SCALE_BASE_H: u32 = 240;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DosboxConfig {
     pub path: String,
+    /// Window enlargement passed to every launch. `None` and `1` behave the same.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<u8>,
+}
+
+/// Only 2..=SCALE_MAX reach the conf generator; anything else means "original size".
+pub fn valid_scale(scale: Option<u8>) -> Option<u8> {
+    scale.filter(|value| (2..=SCALE_MAX).contains(value))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,6 +93,7 @@ impl Default for Config {
             library,
             dosbox: DosboxConfig {
                 path: default_dosbox_path(),
+                scale: None,
             },
         }
     }
@@ -195,10 +219,27 @@ mod tests {
             library: "/games".to_string(),
             dosbox: DosboxConfig {
                 path: "/usr/bin/dosbox".to_string(),
+                scale: Some(2),
             },
         };
         let json = serde_json::to_string(&config).unwrap();
         assert_eq!(serde_json::from_str::<Config>(&json).unwrap(), config);
+    }
+
+    #[test]
+    fn a_config_without_scale_still_parses() {
+        let legacy = r#"{ "library": "C:\\Games", "dosbox": { "path": "C:\\DOSBox\\DOSBox.exe" } }"#;
+        let config = serde_json::from_str::<Config>(legacy).unwrap();
+        assert_eq!(config.dosbox.scale, None);
+    }
+
+    #[test]
+    fn only_2_to_5_reach_the_conf_generator() {
+        assert_eq!(valid_scale(None), None);
+        assert_eq!(valid_scale(Some(1)), None);
+        assert_eq!(valid_scale(Some(2)), Some(2));
+        assert_eq!(valid_scale(Some(5)), Some(5));
+        assert_eq!(valid_scale(Some(6)), None);
     }
 
     #[test]
@@ -219,6 +260,7 @@ mod tests {
             library: ".".to_string(),
             dosbox: DosboxConfig {
                 path: "/definitely/not/here/dosbox".to_string(),
+                scale: None,
             },
         };
         assert!(config.require_dosbox().is_err());

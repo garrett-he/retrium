@@ -189,16 +189,19 @@ pub struct DosboxProbe {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
     pub exists: bool,
+    /// Window scale (1 = original, 2 = 2x, 3 = 3x).
+    pub scale: u8,
 }
 
 #[tauri::command]
 pub fn get_dosbox_path(state: State<'_, AppState>) -> Result<DosboxProbe, String> {
-    let path = state.config.lock().map_err(|e| e.to_string())?.dosbox.path.clone();
-    let file = Path::new(&path);
+    let config = state.config.lock().map_err(|e| e.to_string())?.clone();
+    let file = Path::new(&config.dosbox.path);
     Ok(DosboxProbe {
         exists: file.is_file(),
         version: config::probe_version(file),
-        path,
+        path: config.dosbox.path,
+        scale: config.dosbox.scale.unwrap_or(config::SCALE_MIN),
     })
 }
 
@@ -218,23 +221,45 @@ pub fn set_dosbox_path(path: String, state: State<'_, AppState>) -> Result<Dosbo
     let mut config = state.config.lock().map_err(|e| e.to_string())?.clone();
     config.dosbox.path = path.clone();
     config.save()?;
+    let scale = config.dosbox.scale.unwrap_or(config::SCALE_MIN);
     *state.config.lock().map_err(|e| e.to_string())? = config;
 
     Ok(DosboxProbe {
         path,
         version,
         exists: true,
+        scale,
     })
+}
+
+/// Store the global window scale. `1` stores `None`; only 1..=5 are accepted.
+#[tauri::command]
+pub fn set_dosbox_scale(scale: u8, state: State<'_, AppState>) -> Result<(), String> {
+    if !(config::SCALE_MIN..=config::SCALE_MAX).contains(&scale) {
+        return Err(format!(
+            "window scale must be {}..={}",
+            config::SCALE_MIN,
+            config::SCALE_MAX
+        ));
+    }
+
+    let mut config = state.config.lock().map_err(|e| e.to_string())?.clone();
+    config.dosbox.scale = (scale > config::SCALE_MIN).then_some(scale);
+    config.save()?;
+    *state.config.lock().map_err(|e| e.to_string())? = config;
+    Ok(())
 }
 
 /// Probe a path without saving it, so the settings page can preview the result.
 #[tauri::command]
-pub fn probe_dosbox_path(path: String) -> Result<DosboxProbe, String> {
+pub fn probe_dosbox_path(path: String, state: State<'_, AppState>) -> Result<DosboxProbe, String> {
     let file = Path::new(&path);
+    let current = state.config.lock().map_err(|e| e.to_string())?.clone();
     Ok(DosboxProbe {
         exists: file.is_file(),
         version: config::probe_version(file),
         path,
+        scale: current.dosbox.scale.unwrap_or(config::SCALE_MIN),
     })
 }
 
@@ -263,7 +288,10 @@ pub fn complete_setup(library: String, dosbox: String, state: State<'_, AppState
 
     let config = Config {
         library: library.clone(),
-        dosbox: config::DosboxConfig { path: dosbox },
+        dosbox: config::DosboxConfig {
+            path: dosbox,
+            scale: None,
+        },
     };
     config.save()?;
 
@@ -554,8 +582,16 @@ pub async fn run_cart(
 
     let session = session(&state)?;
     let dosbox = session.config.require_dosbox()?.to_path_buf();
+    let scale = config::valid_scale(session.config.dosbox.scale);
 
-    let prepared = crate::run::prepare(&session.layout, &id, target_id.as_deref(), &dosbox, crate::APP_VERSION)?;
+    let prepared = crate::run::prepare(
+        &session.layout,
+        &id,
+        target_id.as_deref(),
+        &dosbox,
+        crate::APP_VERSION,
+        scale,
+    )?;
     let marker = crate::run::begin(&session.layout, &id, &prepared.baseline)?;
 
     let mut command = tokio::process::Command::new(&prepared.dosbox);

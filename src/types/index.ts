@@ -106,6 +106,8 @@ export interface DosboxProbe {
     path: string;
     version?: string;
     exists: boolean;
+    /** Window scale (1 = original, 2..5 = fixed baseline×N window). */
+    scale: number;
 }
 
 export interface SetupState {

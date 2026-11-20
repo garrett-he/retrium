@@ -84,7 +84,7 @@ export function processFor(cart: Cart, targetId = "play", targetLabel = "Main ga
 
 export function makeBackend(options: BackendOptions = {}) {
     const carts = options.carts ?? [doom, wolfenstein, civilization];
-    const probe = options.probe ?? { path: "/usr/bin/dosbox", exists: true, version: "DOSBox 0.74-3" };
+    const probe = options.probe ?? { path: "/usr/bin/dosbox", exists: true, version: "DOSBox 0.74-3", scale: 1 };
 
     const defaults: Record<string, (args: Record<string, unknown>) => unknown> = {
         get_setup_state: () => options.setup ?? { configured: true, library: "/games", dosbox: "/usr/bin/dosbox" },
@@ -131,6 +131,7 @@ export function makeBackend(options: BackendOptions = {}) {
         resolve_import: () => doom,
         probe_dosbox_path: () => probe,
         set_dosbox_path: (args) => ({ ...probe, path: args.path }),
+        set_dosbox_scale: () => undefined,
         complete_setup: () => undefined,
         set_library_directory: () => undefined,
         pick_library_directory: () => null,
